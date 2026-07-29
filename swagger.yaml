@@ -1,0 +1,428 @@
+openapi: 3.0.0
+info:
+  title: TilTap API
+  description: |
+    Backend API for the TilTap speech-to-text and translation platform.
+    Supports Telegram bot webhooks, translation proxy, and health checks.
+  version: 1.0.0
+  contact:
+    name: TilTap Team
+servers:
+  - url: http://localhost:3000
+    description: Local development server
+
+tags:
+  - name: Health
+    description: Service health checks
+  - name: Translate
+    description: Text translation endpoint
+  - name: Web
+    description: Web mini-service endpoints
+  - name: Webhooks
+    description: External platform webhooks
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      description: Returns the current service status and timestamp.
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  timestamp:
+                    type: string
+                    format: date-time
+
+  /api/translate:
+    post:
+      tags: [Translate]
+      summary: Translate text
+      description: Proxy to the translation module. Falls back to OpenAI if no module URL is configured.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TranslateRequest"
+      responses:
+        "200":
+          description: Translation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TranslateResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Translation service error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /webhook/telegram:
+    post:
+      tags: [Webhooks]
+      summary: Telegram bot webhook
+      description: Receives updates from the Telegram Bot API.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Telegram Update object
+      responses:
+        "200":
+          description: Update acknowledged
+        "500":
+          description: Internal processing error
+
+  /webhook/whatsapp:
+    get:
+      tags: [Webhooks]
+      summary: WhatsApp webhook verification
+      description: >
+        Subscription handshake performed by Meta when the callback URL is saved.
+        Echoes `hub.challenge` back when `hub.verify_token` matches
+        `WHATSAPP_VERIFY_TOKEN`.
+      parameters:
+        - in: query
+          name: hub.mode
+          schema: { type: string, example: subscribe }
+        - in: query
+          name: hub.verify_token
+          schema: { type: string }
+        - in: query
+          name: hub.challenge
+          schema: { type: string }
+      responses:
+        "200":
+          description: Challenge echoed back
+          content:
+            text/plain:
+              schema: { type: string }
+        "403":
+          description: Verify token did not match
+    post:
+      tags: [Webhooks]
+      summary: WhatsApp webhook
+      description: >
+        Receives messages and delivery statuses from the WhatsApp Cloud API.
+        When `WHATSAPP_APP_SECRET` is set, the `X-Hub-Signature-256` header is
+        verified against the raw body and mismatches are rejected. The response
+        is sent before processing, because Meta retries anything slower than a
+        few seconds.
+      parameters:
+        - in: header
+          name: X-Hub-Signature-256
+          schema: { type: string }
+          description: HMAC-SHA256 of the raw body, keyed with the app secret.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: WhatsApp Cloud API webhook payload
+      responses:
+        "200":
+          description: Update acknowledged
+        "403":
+          description: Signature verification failed
+
+  /api/site/config:
+    get:
+      tags: [Web]
+      summary: Public site configuration
+      description: >
+        Which channels this deployment actually offers and the links to them, so
+        the marketing site never advertises a bot that is not configured.
+        Contains no secrets.
+      responses:
+        "200":
+          description: Configuration snapshot
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  channels:
+                    type: object
+                    properties:
+                      web: { type: boolean }
+                      telegram: { type: boolean }
+                      whatsapp: { type: boolean }
+                  links:
+                    type: object
+                    properties:
+                      telegram: { type: string, nullable: true }
+                      whatsapp: { type: string, nullable: true }
+                  maxUploadMb: { type: integer, example: 25 }
+
+  /api/web/transcribe:
+    post:
+      tags: [Web]
+      summary: Transcribe uploaded audio/video
+      description: Starts an asynchronous transcription job for an uploaded media file.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Audio or video file (max 25 MB)
+                sourceLang:
+                  type: string
+                  description: Source language code (auto/ky/tg/uz/en/ru)
+                targetLang:
+                  type: string
+                  description: Target translation language code or none
+      responses:
+        "202":
+          description: Job started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobId:
+                    type: string
+        "400":
+          description: Validation error
+
+  /api/web/youtube:
+    post:
+      tags: [Web]
+      summary: Transcribe YouTube video
+      description: Starts an asynchronous transcription job for a YouTube URL.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              properties:
+                url:
+                  type: string
+                  description: YouTube URL
+                sourceLang:
+                  type: string
+                targetLang:
+                  type: string
+      responses:
+        "202":
+          description: Job started
+        "400":
+          description: Validation error
+
+  /api/web/translate:
+    post:
+      tags: [Web]
+      summary: Translate text
+      description: Direct text translation using the configured translation service.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TranslateRequest"
+      responses:
+        "200":
+          description: Translation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TranslateResponse"
+
+  /api/web/jobs/{jobId}:
+    get:
+      tags: [Web]
+      summary: Get job status
+      description: Returns the current status and result of a transcription job.
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Job status
+        "404":
+          description: Job not found
+
+  /api/web/jobs/{jobId}/progress:
+    get:
+      tags: [Web]
+      summary: Job progress stream
+      description: Server-Sent Events stream for real-time job progress and completion.
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: SSE stream
+
+  /api/web/feedback:
+    post:
+      tags: [Web]
+      summary: Rate a result or report a problem
+      description: |
+        Records a thumbs up/down, or a free-text problem report (`issue`), for a
+        finished result. Identify the result with `jobId` for audio/YouTube runs
+        or with `requestNumber` for a plain text translation, which is not a job;
+        one of the two is required. The context (request number, languages,
+        engine) is snapshotted onto the feedback row server-side.
+        Returns the feedback id, used to attach a reason and comment later.
+
+        `issue` rows require a `comment` and are excluded from the satisfaction
+        rate: they report a problem rather than judging the result.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rating]
+              properties:
+                rating:
+                  type: string
+                  enum: [up, down, issue]
+                jobId:
+                  type: string
+                  description: Job the rating refers to
+                requestNumber:
+                  type: integer
+                  description: Public request number, for results that are not jobs
+                comment:
+                  type: string
+                  description: Free text; required when rating is `issue`
+                clientId:
+                  type: string
+                  description: Anonymous browser id, used to spot repeat reporters
+      responses:
+        "200":
+          description: Feedback recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  id:
+                    type: integer
+                  requestNumber:
+                    type: integer
+                    nullable: true
+        "400":
+          description: Invalid rating
+
+  /api/web/feedback/{id}:
+    patch:
+      tags: [Web]
+      summary: Add a reason and comment
+      description: |
+        Amends the row created by the rating instead of writing a new one, so a
+        single complaint is counted once.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                category:
+                  type: string
+                  enum: [stt, translation, download, speed, other]
+                comment:
+                  type: string
+                  maxLength: 2000
+      responses:
+        "200":
+          description: Feedback updated
+        "400":
+          description: Invalid feedback id
+        "404":
+          description: Feedback not found
+
+components:
+  schemas:
+    TranslateRequest:
+      type: object
+      required: [text, targetLang]
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 5000
+          description: Source text to translate
+          example: "Салам, бу сөздү которуп берчи"
+        targetLang:
+          type: string
+          minLength: 2
+          maxLength: 10
+          description: Target language code
+          example: "ru"
+        sourceLang:
+          type: string
+          minLength: 2
+          maxLength: 10
+          description: Optional source language code
+          example: "ky"
+
+    TranslateResponse:
+      type: object
+      properties:
+        translatedText:
+          type: string
+          example: "Привет, переведи это слово"
+        targetLang:
+          type: string
+          example: "ru"
+        sourceLang:
+          type: string
+          example: "ky"
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Validation failed"
+        details:
+          type: object
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

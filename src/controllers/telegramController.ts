@@ -1,0 +1,1742 @@
+import { Request, Response } from "express";
+import { logger } from "../utils/logger";
+import { unlink } from "fs/promises";
+import { tmpdir } from "os";
+import { join } from "path";
+import type { TelegramUpdate, TelegramMessage, TranscriptionResult, TranscriptionSegment, InlineKeyboardButton } from "../types";
+import { fetchTelegramFile } from "../services/fileDownloadService";
+import { transcribeAudio, formatSubtitles } from "../services/transcriptionService";
+
+import { cleanupTranscription, detectTranscriptionIssues } from "../services/cleanupService";
+import { translateText } from "../services/translationService";
+import {
+  isSupportedMediaUrl,
+  validateMediaUrl,
+  downloadMediaAudio,
+} from "../services/youtubeService";
+import { renderLoadingStages } from "../utils/progressBar";
+import { getMediaErrorMessage } from "../utils/mediaErrors";
+
+import { combinedAccuracy } from "../utils/textSimilarity";
+import { getTestFixture, TEST_FIXTURES, type TestFixture } from "../utils/testFixtures";
+import {
+  sendTextMessage,
+  sendDocument,
+  editMessageText,
+  deleteMessage,
+  answerCallbackQuery,
+  createMainKeyboard,
+  createSettingsMenuKeyboard,
+  createInterfaceLanguageKeyboard,
+  createSourceLanguageKeyboard,
+  createTargetLanguageKeyboard,
+  createConfirmationKeyboard,
+  createTestLanguageKeyboard,
+  createStopKeyboard,
+  createQuickActionsKeyboard,
+  createBackToMenuKeyboard,
+  createResultKeyboard,
+  createFeedbackReasonKeyboard,
+  editMessageReplyMarkup,
+  ensureUserProfile,
+  getUserPreferences,
+  setUserInterfaceLanguage,
+  setUserSourceLanguage,
+  setUserTargetLanguage,
+  getPendingAction,
+  setPendingAction,
+  updatePendingAction,
+  clearPendingAction,
+  getActiveProcess,
+  setActiveProcess,
+  clearActiveProcess,
+  t,
+  escapeHtml,
+  type SupportedLanguage,
+  type PendingAction,
+  type PendingTranslateText,
+  type UserPreferences,
+  LANGUAGE_LABELS,
+  LANGUAGE_FLAGS,
+  TEXT_FILE_THRESHOLD,
+} from "../services/telegramService";
+import {
+  createMessage,
+  createTranscription,
+  saveTranslation,
+  createTranscriptionRequest,
+  updateTranscriptionRequest,
+  createFeedback,
+  updateFeedback,
+  getTranscriptionRequestByNumber,
+  findTranslationRequestByNumber,
+  type Transcription,
+  type FeedbackEntry,
+} from "../db/repos";
+import { sendAdminAlert } from "../services/alertService";
+
+const FFMPEG_PATH = require("ffmpeg-static");
+const PYTHON_PATH = process.platform === "win32" ? "python" : "python3";
+const MAX_MEDIA_BYTES = 25 * 1024 * 1024;
+
+// Simple in-memory deduplication for Telegram update_ids. Prevents duplicate
+// processing when multiple poll forwarders or retries deliver the same update.
+const UPDATE_DEDUP_TTL_MS = 5 * 60 * 1000;
+const recentUpdateIds = new Map<number, number>();
+
+function isDuplicateUpdate(updateId: number): boolean {
+  const now = Date.now();
+  // Clean old entries occasionally (simple sweep every ~100 checks)
+  if (recentUpdateIds.size % 100 === 0) {
+    for (const [id, ts] of recentUpdateIds.entries()) {
+      if (now - ts > UPDATE_DEDUP_TTL_MS) recentUpdateIds.delete(id);
+    }
+  }
+  if (recentUpdateIds.has(updateId)) return true;
+  recentUpdateIds.set(updateId, now);
+  return false;
+}
+
+export async function handleTelegramWebhook(req: Request, res: Response): Promise<void> {
+  const startTime = Date.now();
+  res.sendStatus(200);
+
+  const update = req.body as TelegramUpdate;
+  logger.debug("Received Telegram update", { updateId: update.update_id });
+
+  if (isDuplicateUpdate(update.update_id)) {
+    logger.warn("Duplicate Telegram update ignored", { updateId: update.update_id });
+    return;
+  }
+
+  try {
+    if (update.message) {
+      await handleMessage(update.message, update.update_id);
+    } else if (update.callback_query) {
+      await handleCallbackQuery(update.callback_query);
+    }
+  } catch (err) {
+    logger.error("Error processing Telegram update", {
+      error: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+    });
+  }
+
+  const duration = Date.now() - startTime;
+  logger.info("Webhook processed", { updateId: update.update_id, durationMs: duration });
+}
+
+async function handleMessage(msg: TelegramMessage, updateId: number): Promise<void> {
+  const chatId = msg.chat.id;
+  const text = msg.text?.trim() ?? "";
+
+  // Ensure user profile exists and detect language on first contact
+  const prefs = await ensureUserProfile(chatId, msg.from?.language_code);
+  const lang = prefs.interfaceLanguage;
+
+  // Persist every incoming message
+  const media = msg.video ?? msg.voice ?? msg.audio ?? msg.document;
+  let dbMessageId = 0;
+  try {
+    const persistedMessage = await createMessage({
+      telegramChatId: chatId,
+      telegramMessageId: msg.message_id,
+      updateId,
+      messageType: media ? (msg.video ? "video" : msg.voice ? "voice" : msg.audio ? "audio" : "document") : "text",
+      fileId: media?.file_id,
+      fileSize: media?.file_size,
+      mimeType: msg.document?.mime_type ?? (msg.video ? "video/mp4" : msg.voice ? "audio/ogg" : msg.audio ? "audio/mpeg" : undefined),
+      rawPayload: msg as unknown as Record<string, unknown>,
+    });
+    dbMessageId = persistedMessage.id;
+  } catch (err) {
+    logger.error("Failed to persist incoming message", { error: err instanceof Error ? err.message : String(err), chatId });
+  }
+
+  // Handle commands
+  if (text.startsWith("/")) {
+    await handleCommand(chatId, text, msg, prefs);
+    return;
+  }
+
+  // Auto-detect supported media links in plain text
+  if (!media && text && isSupportedMediaUrl(text)) {
+    await handleMediaLink(chatId, text, prefs);
+    return;
+  }
+
+  // Plain text — check for an active translate-text action first
+  if (!media) {
+    const pending = getPendingAction(chatId);
+    if (pending?.type === "translate_text") {
+      clearPendingAction(chatId);
+      await processTextTranslation(chatId, text, pending.targetLanguage, prefs);
+      return;
+    }
+
+    // An invited feedback comment: ordinary prose typed right after the user
+    // picked a reason for a negative rating. Checked after the pending action so
+    // an in-flight translation request is never swallowed.
+    const pendingText = text ? takePendingFeedbackText(chatId) : undefined;
+    if (pendingText?.feedbackId) {
+      const feedbackId = pendingText.feedbackId;
+      const updated = await updateFeedback(feedbackId, { comment: text.slice(0, 2000) }).catch((err) => {
+        logger.warn("Failed to save feedback comment", {
+          error: err instanceof Error ? err.message : String(err),
+          feedbackId,
+        });
+        return null;
+      });
+      await sendTextMessage(chatId, t("feedbackCommentSaved", lang), {
+        replyMarkup: createMainKeyboard(lang),
+      });
+      if (updated) {
+        void notifyAdminFeedback(updated, true);
+      }
+      return;
+    }
+    if (pendingText) {
+      // Problem report: the row is created now, with the text as its content.
+      await recordTelegramFeedback({
+        chatId,
+        requestNumber: pendingText.issueRequestNumber,
+        rating: "issue",
+        comment: text.slice(0, 2000),
+        user: msg.from,
+        interfaceLang: lang,
+      });
+      await sendTextMessage(chatId, t("feedbackCommentSaved", lang), {
+        replyMarkup: createMainKeyboard(lang),
+      });
+      return;
+    }
+    await sendMainMenu(chatId, prefs);
+    return;
+  }
+
+  // Validate document mime type
+  if (msg.document && msg.document.mime_type) {
+    const allowed = ["video/", "audio/"];
+    if (!allowed.some((prefix) => msg.document!.mime_type!.startsWith(prefix))) {
+      await sendTextMessage(chatId, t("unsupportedFileType", lang), { replyMarkup: createMainKeyboard(lang) });
+      return;
+    }
+  }
+
+  // Validate file size from Telegram metadata
+  const knownSize = msg.video?.file_size ?? msg.voice?.file_size ?? msg.audio?.file_size ?? msg.document?.file_size;
+  if (knownSize && knownSize > MAX_MEDIA_BYTES) {
+    await sendTextMessage(
+      chatId,
+      t("fileTooLarge", lang, { size: (knownSize / 1024 / 1024).toFixed(1) }),
+      { replyMarkup: createMainKeyboard(lang) }
+    );
+    return;
+  }
+
+  // Download and validate size
+  const { buffer } = await fetchTelegramFile(media.file_id);
+  const filename = msg.video?.file_name ?? msg.audio?.file_name ?? msg.document?.file_name ?? "media.mp4";
+
+  if (buffer.length > MAX_MEDIA_BYTES) {
+    await sendTextMessage(
+      chatId,
+      t("fileTooLarge", lang, { size: (buffer.length / 1024 / 1024).toFixed(1) }),
+      { replyMarkup: createMainKeyboard(lang) }
+    );
+    return;
+  }
+
+  // Store pending action and ask for source language first
+  const actionId = setPendingAction(chatId, {
+    type: "media",
+    buffer,
+    filename,
+    messageId: msg.message_id,
+    dbMessageId,
+    sourceLanguage: prefs.sourceLanguage,
+    targetLanguage: prefs.targetLanguage,
+    createdAt: Date.now(),
+  });
+  await sendTextMessage(chatId, t("chooseSourceLanguage", lang), {
+    replyMarkup: createSourceLanguageKeyboard(`confirm:${actionId}`, lang, "action:main"),
+  });
+}
+
+async function handleCommand(
+  chatId: number,
+  text: string,
+  msg: TelegramMessage,
+  prefs?: UserPreferences
+): Promise<void> {
+  const userPrefs = prefs ?? (await getUserPreferences(chatId));
+  const lang = userPrefs.interfaceLanguage;
+  const parts = text.split(" ");
+  const command = parts[0].toLowerCase();
+  const args = parts.slice(1).join(" ").trim();
+
+  switch (command) {
+    case "/start":
+      await sendMainMenu(chatId, userPrefs, true);
+      break;
+
+    case "/help":
+      await sendTextMessage(chatId, t("help", lang), { replyMarkup: createMainKeyboard(lang) });
+      break;
+
+    case "/settings":
+    case "/lang":
+      await sendSettingsMenu(chatId, userPrefs);
+      break;
+
+    case "/test":
+      await sendTextMessage(chatId, t("chooseTestLanguage", lang), {
+        replyMarkup: createTestLanguageKeyboard(),
+      });
+      break;
+
+    case "/youtube":
+      if (!args) {
+        await askYouTubeLink(chatId, userPrefs);
+      } else {
+        await handleMediaLink(chatId, args, userPrefs);
+      }
+      break;
+
+    case "/translate":
+      await startTranslateTextFlow(chatId, userPrefs, args || undefined);
+      break;
+
+    case "/stop":
+      await stopActiveProcess(chatId);
+      break;
+
+    default:
+      await sendTextMessage(
+        chatId,
+        `${t("welcome", lang)}\n\n${t("mainMenuHint", lang)}`,
+        { replyMarkup: createMainKeyboard(lang) }
+      );
+  }
+}
+
+function buildMainMenuText(lang: SupportedLanguage, isStart = false): string {
+  return isStart ? t("welcome", lang) : `${t("welcome", lang)}\n\n${t("mainMenuHint", lang)}`;
+}
+
+async function sendMainMenu(chatId: number, prefs: UserPreferences, isStart = false): Promise<void> {
+  const lang = prefs.interfaceLanguage;
+  await sendTextMessage(chatId, buildMainMenuText(lang, isStart), { replyMarkup: createMainKeyboard(lang) });
+}
+
+async function editMainMenu(chatId: number, messageId: number, prefs: UserPreferences): Promise<void> {
+  const lang = prefs.interfaceLanguage;
+  try {
+    await editMessageText(chatId, messageId, buildMainMenuText(lang), { replyMarkup: createMainKeyboard(lang) });
+  } catch (err) {
+    // The message may be the result document (or any non-text message), which
+    // Telegram refuses to edit ("there is no text in the message to edit").
+    // Never delete the user's result — send the menu as a new message so the
+    // transcription/translation file stays in the chat history.
+    logger.debug("editMainMenu could not edit in place, sending a new menu", {
+      error: err instanceof Error ? err.message : String(err),
+      chatId,
+    });
+    await sendTextMessage(chatId, buildMainMenuText(lang), { replyMarkup: createMainKeyboard(lang) });
+  }
+}
+
+function buildSettingsMenuText(prefs: UserPreferences): string {
+  const lang = prefs.interfaceLanguage;
+  const sourceLabel = `${LANGUAGE_FLAGS[prefs.sourceLanguage]} ${LANGUAGE_LABELS[prefs.sourceLanguage]}`;
+  const targetLabel = prefs.targetLanguage === "none" ? t("noDefaultTarget", lang) : `${LANGUAGE_FLAGS[prefs.targetLanguage]} ${LANGUAGE_LABELS[prefs.targetLanguage]}`;
+
+  return `${t("settingsMenu", lang)}\n\n` +
+    `${t("settingsInterfaceLanguage", lang)}: ${LANGUAGE_FLAGS[lang]} ${LANGUAGE_LABELS[lang]}\n` +
+    `${t("settingsSourceLanguage", lang)}: ${sourceLabel}\n` +
+    `${t("settingsTargetLanguage", lang)}: ${targetLabel}`;
+}
+
+async function sendSettingsMenu(chatId: number, prefs: UserPreferences): Promise<void> {
+  const lang = prefs.interfaceLanguage;
+  await sendTextMessage(chatId, buildSettingsMenuText(prefs), { replyMarkup: createSettingsMenuKeyboard(lang) });
+}
+
+async function editSettingsMenu(chatId: number, messageId: number, prefs: UserPreferences): Promise<void> {
+  await editMessageText(chatId, messageId, buildSettingsMenuText(prefs), { replyMarkup: createSettingsMenuKeyboard(prefs.interfaceLanguage) });
+}
+
+async function askYouTubeLink(chatId: number, prefs: UserPreferences): Promise<void> {
+  const lang = prefs.interfaceLanguage;
+  setPendingAction(chatId, {
+    type: "youtube",
+    url: "",
+    sourceLanguage: prefs.sourceLanguage,
+    targetLanguage: prefs.targetLanguage,
+    createdAt: Date.now(),
+  });
+  await sendTextMessage(chatId, t("sendYoutubeLink", lang), { replyMarkup: createMainKeyboard(lang) });
+}
+
+async function startTranslateTextFlow(chatId: number, prefs: UserPreferences, initialText?: string): Promise<void> {
+  const lang = prefs.interfaceLanguage;
+  const targetLang = prefs.targetLanguage === "none" ? undefined : prefs.targetLanguage;
+
+  if (initialText && targetLang) {
+    await processTextTranslation(chatId, initialText, targetLang, prefs);
+    return;
+  }
+
+  const actionId = setPendingAction(chatId, {
+    type: "translate_text",
+    targetLanguage: targetLang ?? "ru",
+    createdAt: Date.now(),
+  });
+
+  await sendTextMessage(chatId, t("chooseTranslationTargetLanguage", lang), {
+    replyMarkup: createTargetLanguageKeyboard(`translate_text:${actionId}`, lang, "action:main"),
+  });
+}
+
+async function processTextTranslation(
+  chatId: number,
+  text: string,
+  targetLang: SupportedLanguage,
+  prefs: UserPreferences
+): Promise<void> {
+  const lang = prefs.interfaceLanguage;
+  const statusMessageId = await sendTextMessage(chatId, t("translating", lang), {
+    replyMarkup: createMainKeyboard(lang),
+  });
+
+  try {
+    const result = await translateText({
+      text,
+      targetLang,
+      sourceUrl: undefined,
+      sourceType: "telegram_text",
+    });
+
+    const caption = result.requestId ? `#${result.requestId}` : "";
+    const outputText = result.translatedText;
+
+    // A text translation is as ratable as a transcription: the result keyboard
+    // carries 👍/👎 keyed by the public request number, which resolves back to
+    // the translation_requests row. Without a number there is nothing to key on,
+    // so fall back to the plain menu rather than a thumb that goes nowhere.
+    const resultKeyboard = result.requestId
+      ? createResultKeyboard(lang, result.requestId)
+      : createMainKeyboard(lang);
+
+    if (outputText.length > TEXT_FILE_THRESHOLD) {
+      const fs = await import("fs/promises");
+      const buffer = Buffer.from(outputText, "utf-8");
+      await sendDocument(chatId, buffer, caption || "translation.txt", undefined, resultKeyboard);
+    } else {
+      await sendTextMessage(chatId, escapeHtml(outputText), { replyMarkup: resultKeyboard });
+    }
+
+    if (statusMessageId) {
+      try {
+        await deleteMessage(chatId, statusMessageId);
+      } catch (err) {
+        logger.debug("Failed to delete translation status message", { error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+  } catch (err) {
+    logger.error("Text translation failed", {
+      error: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+      chatId,
+    });
+    await sendTextMessage(
+      chatId,
+      t("translationFailed", lang, { error: err instanceof Error ? err.message : String(err) }),
+      { replyMarkup: createMainKeyboard(lang) }
+    );
+  }
+}
+
+async function editYouTubeLinkPrompt(chatId: number, messageId: number, prefs: UserPreferences): Promise<void> {
+  const lang = prefs.interfaceLanguage;
+  setPendingAction(chatId, {
+    type: "youtube",
+    url: "",
+    sourceLanguage: prefs.sourceLanguage,
+    targetLanguage: prefs.targetLanguage,
+    createdAt: Date.now(),
+  });
+  await editMessageText(chatId, messageId, t("sendYoutubeLink", lang), { replyMarkup: createMainKeyboard(lang) });
+}
+
+async function handleMediaLink(chatId: number, url: string, prefs: UserPreferences): Promise<void> {
+  const lang = prefs.interfaceLanguage;
+
+  if (!isSupportedMediaUrl(url)) {
+    await sendTextMessage(chatId, t("invalidMedia", lang), { replyMarkup: createMainKeyboard(lang) });
+    return;
+  }
+
+  const validation = await validateMediaUrl(url);
+  if (!validation.ok) {
+    const msg = getMediaErrorMessage(validation.reason, lang);
+    await sendTextMessage(chatId, msg, { replyMarkup: createMainKeyboard(lang) });
+    return;
+  }
+
+  // Update existing pending YouTube action or create new one
+  const pending = getPendingAction(chatId);
+  let actionId: string;
+  if (pending?.type === "youtube") {
+    actionId = pending.actionId;
+    updatePendingAction(chatId, { url, title: validation.title });
+  } else {
+    actionId = setPendingAction(chatId, {
+      type: "youtube",
+      url,
+      title: validation.title,
+      sourceLanguage: prefs.sourceLanguage,
+      targetLanguage: prefs.targetLanguage,
+      createdAt: Date.now(),
+    });
+  }
+
+  await sendTextMessage(
+    chatId,
+    t("mediaPreview", lang, { title: escapeHtml(validation.title || "") }),
+    { replyMarkup: createSourceLanguageKeyboard(`confirm:${actionId}`, lang, "action:main") }
+  );
+}
+
+function buildConfirmationText(lang: SupportedLanguage, sourceLang: SupportedLanguage, targetLang: SupportedLanguage | "none", title?: string): string {
+  const sourceLabel = `${LANGUAGE_FLAGS[sourceLang]} ${LANGUAGE_LABELS[sourceLang]}`;
+  const targetLabel = targetLang === "none"
+    ? t("noDefaultTarget", lang)
+    : `${LANGUAGE_FLAGS[targetLang]} ${LANGUAGE_LABELS[targetLang]}`;
+
+  const confirmText = t(targetLang === "none" ? "confirmStartNoTranslation" : "confirmStart", lang, { source: sourceLabel, target: targetLabel });
+  if (title) {
+    return t("mediaPreview", lang, { title: escapeHtml(title) }) + "\n\n" + confirmText;
+  }
+  return confirmText;
+}
+
+async function editConfirmationMessage(chatId: number, messageId: number, prefs: UserPreferences): Promise<void> {
+  const lang = prefs.interfaceLanguage;
+  const pending = getPendingAction(chatId);
+  if (!pending || pending.type === "translate_text") return;
+
+  const text = buildConfirmationText(lang, pending.sourceLanguage ?? prefs.sourceLanguage, pending.targetLanguage ?? prefs.targetLanguage, pending.type === "youtube" ? pending.title : undefined);
+  await editMessageText(chatId, messageId, text, { replyMarkup: createConfirmationKeyboard(pending.actionId, lang, pending.targetLanguage ?? prefs.targetLanguage) });
+}
+
+async function startPendingAction(chatId: number, force = false, cardMessageId?: number): Promise<void> {
+  const prefs = await getUserPreferences(chatId);
+  const lang = prefs.interfaceLanguage;
+  const pending = getPendingAction(chatId);
+  if (!pending) {
+    await sendTextMessage(chatId, t("sessionExpired", lang), {
+      replyMarkup: createMainKeyboard(lang),
+    });
+    return;
+  }
+
+  const active = getActiveProcess(chatId);
+  if (active && !force) {
+    await sendTextMessage(chatId, t("processAlreadyRunning", lang), {
+      replyMarkup: {
+        inline_keyboard: [
+          [{ text: t("startNew", lang), callback_data: `force_start:yes:${pending.actionId}` }],
+          [{ text: t("back", lang), callback_data: `force_start:no:${pending.actionId}` }],
+        ],
+      },
+    });
+    return;
+  }
+
+  if (pending.type === "translate_text") {
+    clearPendingAction(chatId);
+    await sendMainMenu(chatId, prefs);
+    return;
+  }
+
+  if (!pending.sourceLanguage) {
+    await sendTextMessage(chatId, t("chooseSourceLanguage", lang), {
+      replyMarkup: createSourceLanguageKeyboard(`confirm:${pending.actionId}`, lang, "action:main"),
+    });
+    return;
+  }
+
+  clearPendingAction(chatId);
+  const sourceLang = pending.sourceLanguage;
+  const targetLang = pending.targetLanguage === "none" ? undefined : pending.targetLanguage;
+
+  if (pending.type === "media") {
+    await processAudio(
+      chatId,
+      pending.buffer,
+      pending.filename,
+      sourceLang,
+      pending.dbMessageId,
+      pending.messageId,
+      targetLang,
+      cardMessageId
+    );
+  } else if (pending.type === "youtube") {
+    try {
+      await downloadAndTranscribeYouTube(chatId, pending.url, sourceLang, targetLang, cardMessageId);
+    } catch (err) {
+      logger.error("YouTube processing failed", {
+        error: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+        chatId,
+        url: pending.url,
+      });
+    }
+  }
+}
+
+// Animated status: a spinner that advances on a timer (so it feels alive even
+// when the underlying step reports no granular progress — e.g. the GigaAM
+// worker) plus the current phase label. Replaces the percentage bar in the
+// media/YouTube flows; no fabricated numbers.
+const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
+function renderSpinner(frame: number, label: string): string {
+  return `${SPINNER_FRAMES[frame % SPINNER_FRAMES.length]} <i>${escapeHtml(label)}</i>`;
+}
+
+interface SpinnerStatus {
+  setPhase(label: string): void;
+  stop(): void;
+}
+
+function createSpinnerStatus(
+  chatId: number,
+  statusMsgId: number,
+  lang: SupportedLanguage,
+  initialLabel: string
+): SpinnerStatus {
+  let frame = 0;
+  let label = initialLabel;
+  let stopped = false;
+  const stopKeyboard = createStopKeyboard(lang, String(chatId));
+
+  const push = () => {
+    if (stopped) return;
+    void editMessageText(chatId, statusMsgId, renderSpinner(frame, label), {
+      replyMarkup: stopKeyboard,
+    }).catch(() => {});
+  };
+
+  const timer = setInterval(() => {
+    if (stopped) return;
+    frame += 1;
+    push();
+  }, 2500);
+
+  return {
+    setPhase(newLabel: string) {
+      if (newLabel && newLabel !== label) {
+        label = newLabel;
+        frame += 1;
+        push();
+      }
+    },
+    stop() {
+      stopped = true;
+      clearInterval(timer);
+    },
+  };
+}
+
+/**
+ * Ping the admin about negative feedback. Positive ratings are only stored —
+ * the admin panel shows them — so the alert channel stays quiet and useful.
+ * Each feedback row gets its own throttle key so nothing is suppressed.
+ */
+async function notifyAdminFeedback(entry: FeedbackEntry, isFollowUp = false): Promise<void> {
+  if (entry.rating !== "down" && entry.rating !== "issue") return;
+
+  const who = [entry.telegram_name, entry.telegram_username ? `@${entry.telegram_username}` : null]
+    .filter(Boolean)
+    .join(" ");
+  const header =
+    entry.rating === "issue" ? "🛠 <b>Сообщение о проблеме</b>" : "👎 <b>Негативный отзыв</b>";
+  const lines = [
+    isFollowUp ? "💬 <b>Комментарий к отзыву</b>" : header,
+    entry.request_number ? `Запрос: #${entry.request_number}` : "Запрос: —",
+    `От: ${escapeHtml(who || "—")} (chat ${entry.telegram_chat_id ?? "—"})`,
+    entry.category ? `Причина: ${entry.category}` : null,
+    entry.source_lang ? `Язык: ${entry.source_lang}` : null,
+    entry.provider || entry.model ? `Движок: ${entry.provider ?? "?"} / ${entry.model ?? "?"}` : null,
+    entry.source_url ? `Ссылка: ${escapeHtml(entry.source_url)}` : null,
+    entry.comment ? `\n«${escapeHtml(entry.comment)}»` : null,
+  ].filter(Boolean);
+
+  await sendAdminAlert(`feedback-${entry.id}${isFollowUp ? "-comment" : ""}`, lines.join("\n"), 0);
+}
+
+// After a user picks a reason for a negative rating we invite a free-text
+// comment. The next plain message from that chat is attached to this feedback
+// row. In-memory and short-lived on purpose: losing it on restart is harmless.
+// Either a comment on a row that already exists (the negative-rating flow), or
+// a problem report that has no row yet — for those the text is the whole
+// content, so the row is written when it arrives rather than on the tap.
+interface PendingFeedbackText {
+  feedbackId?: number;
+  issueRequestNumber?: number;
+  expiresAt: number;
+}
+const pendingFeedbackComments = new Map<number, PendingFeedbackText>();
+const FEEDBACK_COMMENT_WINDOW_MS = 10 * 60 * 1000;
+
+function setPendingFeedbackComment(chatId: number, feedbackId: number): void {
+  pendingFeedbackComments.set(chatId, { feedbackId, expiresAt: Date.now() + FEEDBACK_COMMENT_WINDOW_MS });
+}
+
+function setPendingIssueReport(chatId: number, requestNumber?: number): void {
+  pendingFeedbackComments.set(chatId, {
+    issueRequestNumber: requestNumber,
+    expiresAt: Date.now() + FEEDBACK_COMMENT_WINDOW_MS,
+  });
+}
+
+function takePendingFeedbackText(chatId: number): PendingFeedbackText | undefined {
+  const entry = pendingFeedbackComments.get(chatId);
+  if (!entry) return undefined;
+  pendingFeedbackComments.delete(chatId);
+  if (entry.expiresAt < Date.now()) return undefined;
+  return entry;
+}
+
+/**
+ * Record a rating together with everything an admin needs to judge it without
+ * cross-referencing: who sent it, which public request number, the language
+ * pair and the engine that actually produced the result.
+ */
+async function recordTelegramFeedback(params: {
+  chatId: number;
+  requestNumber?: number;
+  rating: "up" | "down" | "issue";
+  comment?: string;
+  user?: { username?: string; first_name?: string; last_name?: string };
+  interfaceLang: string;
+}): Promise<number | undefined> {
+  let context: Awaited<ReturnType<typeof getTranscriptionRequestByNumber>> = null;
+  // A plain text translation never opens a transcription_requests row, so fall
+  // back to translation_requests. Both draw from one shared sequence, so the
+  // number cannot mean two different requests.
+  let translation: Awaited<ReturnType<typeof findTranslationRequestByNumber>> = null;
+  if (params.requestNumber) {
+    context = await getTranscriptionRequestByNumber(params.requestNumber).catch(() => null);
+    if (!context) {
+      translation = await findTranslationRequestByNumber(params.requestNumber).catch(() => null);
+    }
+  }
+
+  const name = [params.user?.first_name, params.user?.last_name].filter(Boolean).join(" ") || null;
+
+  try {
+    const entry = await createFeedback({
+      requestNumber: params.requestNumber ?? null,
+      source: "telegram",
+      rating: params.rating,
+      comment: params.comment ?? null,
+      telegramChatId: params.chatId,
+      telegramUsername: params.user?.username ?? null,
+      telegramName: name,
+      sourceType: context?.source_type ?? translation?.source_type ?? null,
+      sourceUrl: context?.source_url ?? translation?.source_url ?? null,
+      sourceLang: context?.language ?? translation?.source_lang ?? null,
+      targetLang: translation?.target_lang ?? null,
+      provider: context?.provider ?? translation?.provider ?? null,
+      model: context?.model ?? translation?.model ?? null,
+      interfaceLang: params.interfaceLang,
+    });
+    logger.info("Feedback recorded", {
+      feedbackId: entry.id,
+      rating: params.rating,
+      requestNumber: params.requestNumber,
+      chatId: params.chatId,
+    });
+    // Fire-and-forget: an alert must never delay the user's toast.
+    void notifyAdminFeedback(entry);
+    return entry.id;
+  } catch (err) {
+    logger.error("Failed to record feedback", {
+      error: err instanceof Error ? err.message : String(err),
+      chatId: params.chatId,
+    });
+    return undefined;
+  }
+}
+
+// Every media/YouTube request gets a public request number so the user can quote
+// it in feedback and an admin can look it up. Bookkeeping failures must never
+// block the actual transcription, so both helpers swallow their errors.
+async function openTranscriptionRequest(payload: {
+  chatId: number;
+  messageId?: number;
+  sourceType: string;
+  sourceUrl?: string;
+  filename?: string;
+  language: string;
+}): Promise<number | undefined> {
+  try {
+    const row = await createTranscriptionRequest({
+      telegramChatId: payload.chatId,
+      telegramMessageId: payload.messageId,
+      sourceType: payload.sourceType,
+      sourceUrl: payload.sourceUrl,
+      filename: payload.filename,
+      language: payload.language,
+    });
+    return row.request_number;
+  } catch (err) {
+    logger.warn("Failed to open transcription request", {
+      error: err instanceof Error ? err.message : String(err),
+      chatId: payload.chatId,
+    });
+    return undefined;
+  }
+}
+
+async function closeTranscriptionRequest(
+  requestNumber: number | undefined,
+  updates: Parameters<typeof updateTranscriptionRequest>[1]
+): Promise<void> {
+  if (!requestNumber) return;
+  try {
+    await updateTranscriptionRequest(requestNumber, updates);
+  } catch (err) {
+    logger.warn("Failed to close transcription request", {
+      error: err instanceof Error ? err.message : String(err),
+      requestNumber,
+    });
+  }
+}
+
+// Show or reuse the single status message for a request. When a card message id
+// is supplied (the confirmation card the user just pressed Start on), edit it in
+// place instead of sending a new message — this is what keeps the chat clean.
+async function openStatusMessage(
+  chatId: number,
+  lang: SupportedLanguage,
+  text: string,
+  cardMessageId?: number
+): Promise<number> {
+  if (cardMessageId) {
+    await editMessageText(chatId, cardMessageId, text, {
+      replyMarkup: createStopKeyboard(lang, String(chatId)),
+    }).catch(() => {});
+    return cardMessageId;
+  }
+  return sendTextMessage(chatId, text, { replyMarkup: createStopKeyboard(lang, String(chatId)) });
+}
+
+function createProgressUpdater(chatId: number, statusMsgId: number, lang: SupportedLanguage, details?: string) {
+  let lastPercent = -1;
+  let lastUpdate = 0;
+  let lastLabel = "";
+  const stopKeyboard = createStopKeyboard(lang, String(chatId));
+
+  return async (progress: { percent: number; label: string }) => {
+    lastLabel = progress.label || lastLabel;
+    const now = Date.now();
+    const isFirst = lastUpdate === 0;
+    const percentChanged = progress.percent !== lastPercent;
+    const significant = Math.abs(progress.percent - lastPercent) >= 3;
+    const labelChanged = progress.label && progress.label !== lastLabel;
+    const enoughTime = now - lastUpdate > 1000;
+
+    if (
+      progress.percent === 100 ||
+      (percentChanged && (isFirst || significant || (labelChanged && enoughTime) || enoughTime))
+    ) {
+      lastPercent = progress.percent;
+      lastUpdate = now;
+      await editMessageText(
+        chatId,
+        statusMsgId,
+        renderLoadingStages(progress.percent, lastLabel, details),
+        { replyMarkup: stopKeyboard }
+      ).catch((err) => logger.debug("Progress edit skipped", { error: err instanceof Error ? err.message : String(err) }));
+    }
+  };
+}
+
+async function processAudio(
+  chatId: number,
+  buffer: Buffer,
+  filename: string,
+  language: string,
+  dbMessageId: number,
+  replyToMessageId?: number,
+  targetLanguage?: string,
+  cardMessageId?: number
+): Promise<TranscriptionResult | undefined> {
+  const prefs = await getUserPreferences(chatId);
+  const lang = prefs.interfaceLanguage;
+  const statusMsgId = await openStatusMessage(
+    chatId,
+    lang,
+    renderSpinner(0, t("transcribing", lang)),
+    cardMessageId
+  );
+
+  const removeKeyboard = { replyMarkup: { inline_keyboard: [] as InlineKeyboardButton[][] } };
+  const spinner = createSpinnerStatus(chatId, statusMsgId, lang, t("transcribing", lang));
+  const abortController = new AbortController();
+  const requestNumber = await openTranscriptionRequest({
+    chatId,
+    messageId: replyToMessageId,
+    sourceType: "telegram_media",
+    filename,
+    language,
+  });
+
+  try {
+    setActiveProcess(chatId, {
+      abortController,
+      startTime: Date.now(),
+      statusMessageId: statusMsgId,
+      type: "media",
+      language,
+      filename,
+    });
+
+    const result = await transcribeAudio(
+      buffer,
+      filename,
+      language,
+      (pid) => {
+        setActiveProcess(chatId, {
+          pid,
+          abortController,
+          startTime: Date.now(),
+          statusMessageId: statusMsgId,
+          type: "media",
+          language,
+          filename,
+        });
+      },
+      undefined,
+      abortController.signal
+    );
+    clearActiveProcess(chatId);
+
+    if (result.segments.length === 0) {
+      spinner.stop();
+      await editMessageText(chatId, statusMsgId, t("noSpeech", lang), removeKeyboard);
+      return result;
+    }
+
+    const cleanup = await cleanupTranscription(result.text, result.language);
+    const cleanedText = cleanup.cleanedText;
+
+    // Quality check before sending to user
+    const quality = detectTranscriptionIssues(cleanedText, result.language, result.segments);
+    if (quality.isSuspicious) {
+      logger.warn("Transcription quality flags detected", {
+        chatId,
+        language: result.language,
+        flags: quality.flags,
+        meanConfidence: quality.meanConfidence,
+      });
+    }
+
+    let transcriptionId: number;
+    try {
+      const persisted = await createTranscription({
+        telegramChatId: chatId,
+        messageId: dbMessageId || null,
+        language: result.language,
+        fullText: cleanedText,
+        segments: result.segments,
+      });
+      transcriptionId = persisted.id;
+    } catch (err) {
+      logger.error("Failed to persist transcription", { error: err instanceof Error ? err.message : String(err), chatId });
+      transcriptionId = 0;
+    }
+
+    await closeTranscriptionRequest(requestNumber, {
+      status: "completed",
+      fullText: cleanedText,
+      segmentsJson: result.segments,
+      provider: result.provider,
+      model: result.model,
+      gpu: result.gpu,
+      completedAt: new Date(),
+    });
+
+    if (targetLanguage && targetLanguage !== "none") {
+      spinner.setPhase(t("translating", lang));
+    }
+
+    const qualityWarning = quality.isSuspicious ? quality.flags.join(", ") : undefined;
+    await sendResultDocument(
+      chatId,
+      result.language,
+      cleanedText,
+      result.segments,
+      targetLanguage,
+      transcriptionId,
+      lang,
+      replyToMessageId,
+      qualityWarning,
+      undefined,
+      cleanup.warning,
+      undefined,
+      "telegram_media",
+      requestNumber
+    );
+    spinner.stop();
+    await deleteMessage(chatId, statusMsgId).catch(() => {});
+
+    return { ...result, text: cleanedText };
+  } catch (err) {
+    spinner.stop();
+    clearActiveProcess(chatId);
+    const errMessage = err instanceof Error ? err.message : String(err);
+    logger.error("Transcription error", {
+      error: errMessage,
+      stack: err instanceof Error ? err.stack : undefined,
+      requestNumber,
+    });
+    await closeTranscriptionRequest(requestNumber, { status: "error", errorMessage: errMessage });
+    const msg = t("transcriptionFailed", lang, { error: escapeHtml(errMessage) });
+    await editMessageText(chatId, statusMsgId, msg, removeKeyboard);
+  }
+}
+
+async function downloadAndTranscribeYouTube(
+  chatId: number,
+  url: string,
+  language: string,
+  targetLanguage?: string,
+  cardMessageId?: number
+): Promise<void> {
+  const prefs = await getUserPreferences(chatId);
+  const lang = prefs.interfaceLanguage;
+  let tmpWav = "";
+  const statusMsgId = await openStatusMessage(
+    chatId,
+    lang,
+    renderSpinner(0, t("stageDownload", lang)),
+    cardMessageId
+  );
+
+  const removeKeyboard = { replyMarkup: { inline_keyboard: [] as InlineKeyboardButton[][] } };
+  const abortController = new AbortController();
+  // Two phases, spinner animates throughout: download → transcription.
+  const spinner = createSpinnerStatus(chatId, statusMsgId, lang, t("stageDownload", lang));
+  const requestNumber = await openTranscriptionRequest({
+    chatId,
+    sourceType: "youtube",
+    sourceUrl: url,
+    filename: "youtube_audio.wav",
+    language,
+  });
+
+  try {
+    setActiveProcess(chatId, {
+      abortController,
+      startTime: Date.now(),
+      statusMessageId: statusMsgId,
+      type: "youtube",
+      language,
+      sourceUrl: url,
+      filename: "youtube_audio.wav",
+    });
+
+    const downloadResult = await downloadMediaAudio(url, undefined, abortController.signal);
+    const audioBuffer = downloadResult.audioBuffer;
+    tmpWav = downloadResult.tmpWav;
+
+    spinner.setPhase(t("stageTranscribe", lang));
+
+    const result = await transcribeAudio(
+      audioBuffer,
+      "youtube_audio.wav",
+      language,
+      (pid) => {
+        setActiveProcess(chatId, {
+          pid,
+          abortController,
+          startTime: Date.now(),
+          statusMessageId: statusMsgId,
+          type: "youtube",
+          language,
+          sourceUrl: url,
+          filename: "youtube_audio.wav",
+        });
+      },
+      undefined,
+      abortController.signal
+    );
+    await unlink(tmpWav).catch(() => {});
+    clearActiveProcess(chatId);
+
+    if (result.segments.length === 0) {
+      spinner.stop();
+      await deleteMessage(chatId, statusMsgId).catch(() => {});
+      await sendTextMessage(chatId, t("noSpeech", lang), { replyMarkup: createBackToMenuKeyboard(lang) });
+      return;
+    }
+
+    const cleanup = await cleanupTranscription(result.text, result.language);
+    const cleanedText = cleanup.cleanedText;
+
+    let transcriptionId: number;
+    try {
+      const persisted = await createTranscription({
+        telegramChatId: chatId,
+        messageId: null,
+        language: result.language,
+        fullText: cleanedText,
+        segments: result.segments,
+      });
+      transcriptionId = persisted.id;
+    } catch (err) {
+      logger.error("Failed to persist YouTube transcription", { error: err instanceof Error ? err.message : String(err), chatId });
+      transcriptionId = 0;
+    }
+
+    await closeTranscriptionRequest(requestNumber, {
+      status: "completed",
+      fullText: cleanedText,
+      segmentsJson: result.segments,
+      provider: result.provider,
+      model: result.model,
+      gpu: result.gpu,
+      completedAt: new Date(),
+    });
+
+    if (targetLanguage && targetLanguage !== "none") {
+      spinner.setPhase(t("translating", lang));
+    }
+
+    await sendResultDocument(
+      chatId,
+      result.language,
+      cleanedText,
+      result.segments,
+      targetLanguage,
+      transcriptionId,
+      lang,
+      undefined,
+      undefined,
+      "YouTube",
+      cleanup.warning,
+      url,
+      "youtube",
+      requestNumber
+    );
+    spinner.stop();
+    await deleteMessage(chatId, statusMsgId).catch(() => {});
+  } catch (err) {
+    spinner.stop();
+    clearActiveProcess(chatId);
+    await unlink(tmpWav).catch(() => {});
+    const errMessage = err instanceof Error ? err.message : String(err);
+    await closeTranscriptionRequest(requestNumber, { status: "error", errorMessage: errMessage });
+    const msg = `❌ ${escapeHtml(errMessage)}`;
+    await editMessageText(chatId, statusMsgId, msg, removeKeyboard);
+    throw err;
+  }
+}
+
+async function stopActiveProcess(chatId: number): Promise<void> {
+  const prefs = await getUserPreferences(chatId);
+  const lang = prefs.interfaceLanguage;
+  const active = getActiveProcess(chatId);
+
+  if (!active) {
+    await sendTextMessage(chatId, t("nothingToStop", lang), { replyMarkup: createMainKeyboard(lang) });
+    return;
+  }
+
+  try {
+    active.abortController?.abort();
+    if (active.pid) {
+      process.kill(active.pid, "SIGTERM");
+    }
+  } catch (err) {
+    logger.warn("Failed to kill process", { error: err instanceof Error ? err.message : String(err), pid: active.pid, chatId });
+  }
+
+  clearActiveProcess(chatId);
+
+  if (active.statusMessageId) {
+    await editMessageText(
+      chatId,
+      active.statusMessageId,
+      `🛑 ${t("processingStopped", lang)}`,
+      { replyMarkup: { inline_keyboard: [] } }
+    ).catch(() => {});
+  }
+
+  await sendTextMessage(chatId, t("processingStopped", lang), { replyMarkup: createMainKeyboard(lang) });
+}
+
+async function sendResultDocument(
+  chatId: number,
+  sourceLang: string,
+  cleanedText: string,
+  segments: TranscriptionSegment[],
+  targetLang: string | undefined,
+  transcriptionId: number,
+  lang: SupportedLanguage,
+  replyToMessageId?: number,
+  qualityWarning?: string,
+  titlePrefix?: string,
+  cleanupWarning?: string,
+  sourceUrl?: string,
+  sourceType?: string,
+  requestNumber?: number
+): Promise<void> {
+  const sourceLabel = LANGUAGE_LABELS[sourceLang as SupportedLanguage] ?? sourceLang;
+
+  // Rating buttons ride along with the result, so giving feedback is one tap.
+  const backToMenuKeyboard = createResultKeyboard(lang, requestNumber);
+
+  // If a target language is chosen and differs from the source, send only the translated file.
+  if (targetLang && targetLang !== "none" && targetLang !== sourceLang && cleanedText.trim()) {
+    try {
+      const translation = await translateText({ text: cleanedText, targetLang, sourceLang: sourceLang, sourceUrl, sourceType });
+
+      if (transcriptionId > 0) {
+        await saveTranslation({
+          telegramChatId: chatId,
+          transcriptionId,
+          sourceText: cleanedText,
+          targetLang,
+          translatedText: translation.translatedText,
+        }).catch((err) => logger.error("Failed to persist translation", { error: err instanceof Error ? err.message : String(err), chatId }));
+      }
+
+      const targetLabel = LANGUAGE_LABELS[targetLang as SupportedLanguage] ?? targetLang;
+      const title = `${targetLabel}`;
+      const warnings = [
+        cleanupWarning,
+        translation.warning,
+      ].filter(Boolean);
+      const warningNote = warnings.length ? `\n\n⚠️ ${warnings.join(" ")}` : "";
+      // Show the same number the feedback buttons will report, so a user who
+      // quotes "#N" and an admin looking at feedback see one identifier.
+      const shownNumber = translation.requestId ?? requestNumber;
+      const caption = shownNumber ? `${title} #${shownNumber}` : title;
+      await sendDocument(
+        chatId,
+        Buffer.from(`${title}${warningNote}\n\n${translation.translatedText}`, "utf-8"),
+        `translation_${Date.now()}.txt`,
+        caption,
+        createResultKeyboard(lang, shownNumber)
+      );
+      return;
+    } catch (err) {
+      logger.error("Translation failed, falling back to transcription", {
+        error: err instanceof Error ? err.message : String(err),
+        chatId,
+        targetLang,
+      });
+      await sendTextMessage(
+        chatId,
+        t("translationFailed", lang, { error: err instanceof Error ? err.message : String(err) }),
+        { replyMarkup: backToMenuKeyboard }
+      ).catch(() => {});
+      // Fall through to send the original transcription file.
+    }
+  }
+
+  const title = titlePrefix ? `${titlePrefix} — ${sourceLabel}` : `${sourceLabel}`;
+  const subtitles = formatSubtitles(segments);
+  const warningHeader = cleanupWarning ? `\n\n⚠️ ${cleanupWarning}` : "";
+  const fileContent = `${title}${warningHeader}\n\n${cleanedText}\n\n---\n\n${subtitles}`;
+  const numberSuffix = requestNumber ? ` #${requestNumber}` : "";
+  const caption = `${qualityWarning ? qualityWarning : title}${numberSuffix}`;
+  await sendDocument(
+    chatId,
+    Buffer.from(fileContent, "utf-8"),
+    `transcription_${Date.now()}.txt`,
+    caption,
+    backToMenuKeyboard
+  );
+}
+
+async function prepareTestAudio(fixture: TestFixture, tmpWav: string): Promise<{ source: string; captionPromise: Promise<string | null> }> {
+  const fs = await import("fs/promises");
+
+  // Local fixtures (or cached hard fixtures with no URL) should be copied
+  // directly instead of re-downloading from YouTube.
+  const useLocalFile = fixture.source === "local" || (fixture.source === "youtube" && !fixture.url);
+  if (useLocalFile && fixture.wavPath) {
+    const wavPath = join(process.cwd(), fixture.wavPath);
+    try {
+      await fs.access(wavPath);
+      await fs.copyFile(wavPath, tmpWav);
+      return { source: fixture.wavPath, captionPromise: Promise.resolve(null) };
+    } catch {
+      // Cached/local file missing; fall through to download path for YouTube fixtures.
+    }
+  }
+
+  // Caption extraction used yt-dlp, which was removed (Cobalt cannot fetch
+  // subtitles). /test now always scores against the curated reference
+  // transcripts in test_audio/ rather than YouTube's own captions.
+  const captionPromise: Promise<string | null> = Promise.resolve(null);
+
+  await new Promise<void>((resolve, reject) => {
+    const { spawn } = require("child_process");
+    const proc = spawn(PYTHON_PATH, ["download_youtube.py", fixture.url, FFMPEG_PATH, tmpWav], {
+      cwd: process.cwd(),
+      env: { ...process.env, PYTHONIOENCODING: "utf-8" },
+    });
+
+    let stderr = "";
+    proc.stderr.on("data", (d: Buffer) => { stderr += d.toString("utf-8"); });
+    proc.on("close", (code: number) => {
+      if (code !== 0) reject(new Error(`Download failed: ${stderr}`));
+      else resolve();
+    });
+    proc.on("error", (err: Error) => reject(new Error(`Download process error: ${err.message}`)));
+  });
+
+  return { source: fixture.url!, captionPromise };
+}
+
+async function runAccuracyTest(chatId: number, language: string): Promise<void> {
+  const prefs = await getUserPreferences(chatId);
+  const lang = prefs.interfaceLanguage;
+  const fixture = getTestFixture(language);
+  if (!fixture) {
+    await sendTextMessage(chatId, t("fixtureNotFound", lang), { replyMarkup: createMainKeyboard(lang) });
+    return;
+  }
+
+  const testHeader = t("testHeader", lang);
+  const statusMsgId = await sendTextMessage(
+    chatId,
+    renderLoadingStages(0, t("testPreparing", lang), fixture.title, testHeader),
+    { replyMarkup: createStopKeyboard(lang, String(chatId)) }
+  );
+  const tmpWav = join(tmpdir(), `tiltab_test_${Date.now()}.wav`);
+  const removeKeyboard = { replyMarkup: { inline_keyboard: [] as InlineKeyboardButton[][] } };
+  const stopKeyboard = createStopKeyboard(lang, String(chatId));
+  const testProgress = createProgressUpdater(chatId, statusMsgId, lang, fixture.title);
+  const abortController = new AbortController();
+
+  try {
+    setActiveProcess(chatId, {
+      abortController,
+      startTime: Date.now(),
+      statusMessageId: statusMsgId,
+      type: "test",
+      language,
+      filename: fixture.title,
+    });
+
+    await editMessageText(chatId, statusMsgId, renderLoadingStages(30, t("testDownloading", lang), fixture.title, testHeader), { replyMarkup: stopKeyboard });
+
+    const { captionPromise } = await prepareTestAudio(fixture, tmpWav);
+
+    await editMessageText(chatId, statusMsgId, renderLoadingStages(60, t("testRecognizing", lang), fixture.title, testHeader), { replyMarkup: stopKeyboard });
+
+    const fs = await import("fs/promises");
+    const audioBuffer = await fs.readFile(tmpWav);
+    const result = await transcribeAudio(
+      audioBuffer,
+      "test_audio.wav",
+      language,
+      (pid) => {
+        setActiveProcess(chatId, {
+          pid,
+          abortController,
+          startTime: Date.now(),
+          statusMessageId: statusMsgId,
+          type: "test",
+          language,
+          filename: fixture.title,
+        });
+      },
+      (progress) => testProgress({ ...progress, label: `${progress.label} (${t("testRecognizing", lang)})` }),
+      abortController.signal
+    );
+    await fs.unlink(tmpWav).catch(() => {});
+
+    await editMessageText(chatId, statusMsgId, renderLoadingStages(100, t("testScoring", lang), fixture.title, testHeader), removeKeyboard);
+
+    if (result.segments.length === 0 || !result.text.trim()) {
+      await editMessageText(chatId, statusMsgId, `<b>🤷 ${t("noSpeech", lang)}</b>`, removeKeyboard);
+      return;
+    }
+
+    const cleanup = await cleanupTranscription(result.text, result.language);
+    const cleanedText = cleanup.cleanedText;
+
+    let referenceText = await captionPromise;
+    if (!referenceText || referenceText.trim().length < 10) {
+      referenceText = fixture.referenceText;
+    }
+
+    const accuracy = combinedAccuracy(cleanedText, referenceText);
+
+    let transcriptionId: number;
+    try {
+      const persisted = await createTranscription({
+        telegramChatId: chatId,
+        messageId: null,
+        language: result.language,
+        fullText: cleanedText,
+        segments: result.segments,
+      });
+      transcriptionId = persisted.id;
+    } catch (err) {
+      logger.error("Failed to persist test transcription", { error: err instanceof Error ? err.message : String(err), chatId });
+      transcriptionId = 0;
+    }
+
+    const langNames: Record<string, string> = {
+      ky: "Кыргызча",
+      tg: "Тоҷикӣ",
+      uz: "O'zbekча",
+      en: "English",
+      ru: "Русский",
+    };
+
+    const header = `<b>${t("testCompleted", lang)}</b>\n<i>${fixture.title}</i>\n`;
+    const accuracyLine = renderAccuracyLine(accuracy);
+    const transcriptionSection = `\n<b>${t("recognizedText", lang)} (${langNames[result.language] ?? result.language}):</b>\n<code>${truncate(cleanedText, 900)}</code>`;
+    const referenceSection = `\n<b>${t("referenceText", lang)}:</b>\n<code>${truncate(referenceText, 900)}</code>`;
+    const summary = `${header}\n${accuracyLine}${transcriptionSection}${referenceSection}`;
+
+    await editMessageText(chatId, statusMsgId, summary, removeKeyboard);
+  } catch (err) {
+    const fs = await import("fs/promises");
+    await fs.unlink(tmpWav).catch(() => {});
+    const msg = `❌ ${t("transcriptionFailed", lang, { error: escapeHtml(err instanceof Error ? err.message : String(err)) })}`;
+    await editMessageText(chatId, statusMsgId, msg, removeKeyboard);
+    throw err;
+  }
+}
+
+function renderAccuracyLine(accuracy: number): string {
+  const emoji = accuracy >= 90 ? "🟢" : accuracy >= 70 ? "🟡" : accuracy >= 50 ? "🟠" : "🔴";
+  return `<b>${emoji} ${accuracy}%</b>\n`;
+}
+
+function truncate(text: string, max: number): string {
+  if (text.length <= max) return text;
+  return text.slice(0, max - 1) + "…";
+}
+
+async function runSingleTest(chatId: number, language: string): Promise<void> {
+  const originalLang = await getUserPreferences(chatId).then((p) => p.sourceLanguage);
+  try {
+    await setUserSourceLanguage(chatId, language as SupportedLanguage);
+    await runAccuracyTest(chatId, language);
+  } catch (err) {
+    logger.error("Test command failed", { error: err instanceof Error ? err.message : String(err), chatId, language });
+  } finally {
+    if (originalLang) {
+      await setUserSourceLanguage(chatId, originalLang);
+    }
+  }
+}
+
+async function runAllTests(chatId: number): Promise<void> {
+  const originalLang = await getUserPreferences(chatId).then((p) => p.sourceLanguage);
+  try {
+    for (const language of ["ky", "tg", "uz", "en", "ru"]) {
+      if (getTestFixture(language)) {
+        try {
+          await setUserSourceLanguage(chatId, language as SupportedLanguage);
+          await runAccuracyTest(chatId, language);
+        } catch (err) {
+          logger.error("Test failed for language", { error: err instanceof Error ? err.message : String(err), chatId, language });
+        }
+      }
+    }
+  } finally {
+    if (originalLang) {
+      await setUserSourceLanguage(chatId, originalLang);
+    }
+  }
+}
+
+async function handleCallbackQuery(callbackQuery: {
+  id: string;
+  from: { id: number; username?: string; first_name?: string; last_name?: string };
+  message?: TelegramMessage;
+  data: string;
+}): Promise<void> {
+  const data = callbackQuery.data;
+  // Feedback taps answer the callback themselves so the confirmation appears as
+  // a toast instead of a new chat message. A callback can only be answered once.
+  const isFeedback = data.startsWith("fb:") || data.startsWith("fbc:");
+
+  if (!isFeedback) {
+    try {
+      await answerCallbackQuery(callbackQuery.id);
+    } catch (err) {
+      logger.debug("answerCallbackQuery failed, continuing", { error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+
+  const chatId = callbackQuery.message?.chat.id;
+  const messageId = callbackQuery.message?.message_id;
+
+  if (!chatId || !messageId) {
+    // Feedback taps defer answering; without a message there is nothing left to
+    // do but clear the client's spinner.
+    if (isFeedback) await answerCallbackQuery(callbackQuery.id).catch(() => {});
+    return;
+  }
+
+  const prefs = await getUserPreferences(chatId);
+  const lang = prefs.interfaceLanguage;
+
+  // ---- Feedback: rating ----------------------------------------------------
+  if (data.startsWith("fb:")) {
+    const [, rating, ref] = data.split(":");
+    const requestNumber = Number(ref) > 0 ? Number(ref) : undefined;
+
+    // A problem report writes nothing yet: it is the text that follows, and an
+    // empty report would only add noise to the admin panel.
+    if (rating === "issue") {
+      setPendingIssueReport(chatId, requestNumber);
+      await answerCallbackQuery(callbackQuery.id, t("feedbackReportHint", lang), true).catch(() => {});
+      await editMessageReplyMarkup(chatId, messageId, createBackToMenuKeyboard(lang)).catch(() => {});
+      return;
+    }
+
+    const feedbackId = await recordTelegramFeedback({
+      chatId,
+      requestNumber,
+      rating: rating === "up" ? "up" : "down",
+      user: callbackQuery.from,
+      interfaceLang: lang,
+    });
+
+    if (rating === "up") {
+      await answerCallbackQuery(callbackQuery.id, t("feedbackThanks", lang)).catch(() => {});
+      await editMessageReplyMarkup(chatId, messageId, createBackToMenuKeyboard(lang)).catch(() => {});
+    } else {
+      await answerCallbackQuery(callbackQuery.id, t("feedbackAskReason", lang)).catch(() => {});
+      if (feedbackId) {
+        await editMessageReplyMarkup(chatId, messageId, createFeedbackReasonKeyboard(lang, feedbackId)).catch(() => {});
+      }
+    }
+    return;
+  }
+
+  // ---- Feedback: reason category ------------------------------------------
+  if (data.startsWith("fbc:")) {
+    const [, category, idRaw] = data.split(":");
+    const feedbackId = Number(idRaw);
+    if (Number.isFinite(feedbackId) && feedbackId > 0) {
+      await updateFeedback(feedbackId, { category }).catch((err) =>
+        logger.warn("Failed to set feedback category", {
+          error: err instanceof Error ? err.message : String(err),
+          feedbackId,
+        })
+      );
+      setPendingFeedbackComment(chatId, feedbackId);
+    }
+    // A popup rather than a toast: the user has to read this one to know that
+    // typing a comment next is what we are waiting for.
+    await answerCallbackQuery(callbackQuery.id, t("feedbackCommentHint", lang), true).catch(() => {});
+    await editMessageReplyMarkup(chatId, messageId, createBackToMenuKeyboard(lang)).catch(() => {});
+    return;
+  }
+
+  // Interface language
+  if (data.startsWith("ui_lang:")) {
+    const langCode = data.split(":")[1] as SupportedLanguage;
+    await setUserInterfaceLanguage(chatId, langCode);
+    await editMainMenu(chatId, messageId, { ...prefs, interfaceLanguage: langCode });
+    return;
+  }
+
+  // Source language selection
+  if (data.startsWith("source:")) {
+    const [, sourceLang, action, actionId] = data.split(":");
+    const normalized = sourceLang as SupportedLanguage;
+
+    if (action === "default") {
+      await setUserSourceLanguage(chatId, normalized);
+      const updatedPrefs = await getUserPreferences(chatId);
+      await editSettingsMenu(chatId, messageId, updatedPrefs);
+    } else if (action === "confirm" && actionId) {
+      const pending = getPendingAction(chatId);
+      if (pending && pending.actionId === actionId) {
+        updatePendingAction(chatId, { sourceLanguage: normalized });
+      }
+      await editConfirmationMessage(chatId, messageId, prefs);
+    }
+    return;
+  }
+
+  // Target language selection
+  if (data.startsWith("target:")) {
+    const [, targetLang, action, actionId] = data.split(":");
+    const normalized = targetLang as SupportedLanguage | "none";
+
+    if (action === "default") {
+      await setUserTargetLanguage(chatId, normalized);
+      const updatedPrefs = await getUserPreferences(chatId);
+      await editSettingsMenu(chatId, messageId, updatedPrefs);
+    } else if (action === "confirm" && actionId) {
+      const pending = getPendingAction(chatId);
+      if (pending && pending.actionId === actionId) {
+        updatePendingAction(chatId, { targetLanguage: normalized });
+      }
+      await setUserTargetLanguage(chatId, normalized);
+      await editConfirmationMessage(chatId, messageId, prefs);
+    } else if (action === "translate_text" && actionId) {
+      const pending = getPendingAction(chatId);
+      if (pending && pending.type === "translate_text" && pending.actionId === actionId) {
+        if (normalized !== "none") {
+          updatePendingAction(chatId, { targetLanguage: normalized });
+        }
+      }
+      await sendTextMessage(chatId, t("sendTextToTranslate", lang), { replyMarkup: createMainKeyboard(lang) });
+    }
+    return;
+  }
+
+  // Confirmation actions
+  if (data.startsWith("confirm:")) {
+    const [, action, actionId] = data.split(":");
+    const pending = getPendingAction(chatId);
+
+    if (!pending || pending.actionId !== actionId) {
+      await editMessageText(chatId, messageId, t("sessionExpired", lang), { replyMarkup: createMainKeyboard(lang) });
+      return;
+    }
+
+    if (action === "start") {
+      await startPendingAction(chatId, false, messageId);
+    } else if (action === "lang") {
+      await editMessageText(
+        chatId,
+        messageId,
+        t("chooseSourceLanguage", lang),
+        { replyMarkup: createSourceLanguageKeyboard(`confirm:${actionId}`, lang, `confirm:back:${actionId}`) }
+      );
+    } else if (action === "target") {
+      await editMessageText(
+        chatId,
+        messageId,
+        t("chooseTargetLanguage", lang),
+        { replyMarkup: createTargetLanguageKeyboard(`confirm:${actionId}`, lang, `confirm:back:${actionId}`) }
+      );
+    } else if (action === "back") {
+      await editConfirmationMessage(chatId, messageId, prefs);
+    } else if (action === "cancel") {
+      clearPendingAction(chatId);
+      await editMainMenu(chatId, messageId, prefs);
+    }
+    return;
+  }
+
+  // Test language
+  if (data.startsWith("test_lang:")) {
+    const testLang = data.split(":")[1];
+    if (testLang === "all") {
+      await runAllTests(chatId);
+    } else {
+      await runSingleTest(chatId, testLang);
+    }
+    return;
+  }
+
+  // Force-start an action while another process is running
+  if (data.startsWith("force_start:")) {
+    const [, decision, actionId] = data.split(":");
+    const pending = getPendingAction(chatId);
+    if (!pending || pending.actionId !== actionId) {
+      await editMessageText(chatId, messageId, t("sessionExpired", lang), { replyMarkup: createMainKeyboard(lang) });
+      return;
+    }
+    if (decision === "yes") {
+      const active = getActiveProcess(chatId);
+      if (active) {
+        try {
+          active.abortController?.abort();
+          if (active.pid) {
+            process.kill(active.pid, "SIGTERM");
+          }
+        } catch (err) {
+          logger.warn("Failed to kill active process", { error: err instanceof Error ? err.message : String(err), pid: active.pid, chatId });
+        }
+        clearActiveProcess(chatId);
+      }
+      await startPendingAction(chatId, true, messageId);
+    } else {
+      clearPendingAction(chatId);
+      await editMainMenu(chatId, messageId, prefs);
+    }
+    return;
+  }
+
+  // Main menu actions
+  if (data === "action:settings") {
+    await editSettingsMenu(chatId, messageId, prefs);
+    return;
+  }
+
+  if (data === "action:languages") {
+    await editSettingsMenu(chatId, messageId, prefs);
+    return;
+  }
+
+  if (data === "action:settings:interface") {
+    await editMessageText(chatId, messageId, t("chooseInterfaceLanguage", lang), {
+      replyMarkup: createInterfaceLanguageKeyboard(lang, "action:settings"),
+    });
+    return;
+  }
+
+  if (data === "action:settings:source") {
+    await editMessageText(chatId, messageId, t("chooseSourceLanguage", lang), {
+      replyMarkup: createSourceLanguageKeyboard("default", lang, "action:settings"),
+    });
+    return;
+  }
+
+  if (data === "action:settings:target") {
+    await editMessageText(chatId, messageId, t("chooseTargetLanguage", lang), {
+      replyMarkup: createTargetLanguageKeyboard("default", lang, "action:settings"),
+    });
+    return;
+  }
+
+  if (data === "action:main") {
+    await editMainMenu(chatId, messageId, prefs);
+    return;
+  }
+
+  if (data === "action:help") {
+    await editMessageText(chatId, messageId, t("help", lang), { replyMarkup: createMainKeyboard(lang) });
+    return;
+  }
+
+  if (data === "action:translate_text") {
+    await startTranslateTextFlow(chatId, prefs);
+    return;
+  }
+
+  if (data === "action:test") {
+    await editMessageText(chatId, messageId, t("chooseTestLanguage", lang), { replyMarkup: createTestLanguageKeyboard() });
+    return;
+  }
+
+  if (data === "action:stop" || data.startsWith("stop:")) {
+    await stopActiveProcess(chatId);
+    return;
+  }
+
+}

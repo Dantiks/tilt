@@ -1,0 +1,16 @@
+# Pin PyTorch to CUDA 12.4 wheels so the nvidia/cuda:12.4.1-runtime image can
+# load GPU kernels. Without the cu124 index, pip may install a cu130 build that
+# expects CUDA 13.0 runtime libraries and reports cuda_available=False.
+--extra-index-url https://download.pytorch.org/whl/cu124
+torch==2.4.1+cu124
+torchaudio==2.4.1+cu124
+
+runpod
+faster-whisper>=1.1.0
+numpy>=1.24.0
+ffmpeg-python
+transformers>=4.36.0
+accelerate>=0.25.0
+soundfile>=0.12.1
+librosa>=0.10.1
+silero-vad>=6.0.0

@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="corporate">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TilTap — transcribe and translate</title>
+  <meta name="description" content="Upload audio or video, or paste a media link, and get a transcript with timecodes plus a translation.">
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css" rel="stylesheet" type="text/css" />
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link rel="stylesheet" href="/site/assets/site.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗣️</text></svg>">
+</head>
+<body class="min-h-screen bg-base-200">
+
+  <header class="navbar bg-base-100 border-b border-base-300 px-4 lg:px-8 sticky top-0 z-50">
+    <div class="navbar-start">
+      <a href="/" class="btn btn-ghost text-xl font-bold gap-2 px-2"><span aria-hidden="true">🗣️</span> TilTap</a>
+    </div>
+    <div class="navbar-end gap-1">
+      <button class="btn btn-ghost btn-sm btn-circle" id="themeToggle" aria-label="Toggle theme">
+        <span id="themeIcon">🌙</span>
+      </button>
+      <div class="dropdown dropdown-end">
+        <div tabindex="0" role="button" class="btn btn-sm btn-ghost">
+          <span id="currentLangFlag">🇬🇧</span>
+          <span class="hidden sm:inline" id="currentLangLabel">English</span>
+        </div>
+        <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-50 w-52 p-2 shadow" id="langMenu"></ul>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-4xl mx-auto px-4 py-8 space-y-6">
+
+    <div>
+      <h1 class="text-2xl font-bold" data-i18n="appTitle">TilTap</h1>
+      <p class="opacity-70" data-i18n="appSubtitle">Transcribe and translate</p>
+    </div>
+
+    <!-- ===================== Input ===================== -->
+    <section class="card bg-base-100 shadow-sm">
+      <div class="card-body space-y-5">
+
+        <div role="tablist" class="tabs tabs-box">
+          <button role="tab" class="tab tab-active" data-tab="file" data-i18n="tabUpload">Upload file</button>
+          <button role="tab" class="tab" data-tab="link" data-i18n="tabLink">Media link</button>
+          <button role="tab" class="tab" data-tab="text" data-i18n="tabText">Translate text</button>
+        </div>
+
+        <div id="panel-file">
+          <label class="dropzone block" id="dropzone">
+            <div class="text-4xl mb-2" aria-hidden="true">📁</div>
+            <div class="font-medium" data-i18n="dropzoneTitle">Drop audio or video here</div>
+            <div class="text-sm opacity-60 mt-1" data-i18n="dropzoneHint">or click to choose a file — max 25 MB</div>
+            <input type="file" id="fileInput" accept="audio/*,video/*">
+            <div class="mt-3 text-sm font-medium" id="fileName"></div>
+          </label>
+          <audio id="filePreview" controls class="hidden w-full mt-4"></audio>
+        </div>
+
+        <div id="panel-link" class="hidden">
+          <label class="label" for="mediaUrl"><span class="label-text" data-i18n="linkLabel">Media link</span></label>
+          <input type="url" id="mediaUrl" class="input input-bordered w-full" placeholder="https://www.youtube.com/watch?v=…" autocomplete="off">
+          <div id="linkPreview" class="hidden mt-4 aspect-video">
+            <iframe id="linkFrame" class="w-full h-full rounded-box" frameborder="0" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen title="Video preview"></iframe>
+          </div>
+        </div>
+
+        <div id="panel-text" class="hidden">
+          <label class="label" for="sourceText"><span class="label-text" data-i18n="textLabel">Text to translate</span></label>
+          <textarea id="sourceText" class="textarea textarea-bordered w-full" rows="7" data-i18n-placeholder="textPlaceholder"></textarea>
+        </div>
+
+        <div class="grid gap-4 sm:grid-cols-2">
+          <div id="sourceLangWrap">
+            <label class="label" for="sourceLang"><span class="label-text" data-i18n="sourceLangLabel">Spoken language</span></label>
+            <select id="sourceLang" class="select select-bordered w-full"></select>
+          </div>
+          <div>
+            <label class="label" for="targetLang"><span class="label-text" data-i18n="targetLangLabel">Translate into</span></label>
+            <select id="targetLang" class="select select-bordered w-full"></select>
+          </div>
+        </div>
+
+        <button class="btn btn-primary btn-block btn-lg" id="startBtn" data-i18n="startBtn">Start</button>
+
+        <div id="progressWrap" class="hidden space-y-2">
+          <progress class="progress progress-primary w-full" id="progressBar" value="0" max="100"></progress>
+          <div class="flex justify-between text-sm opacity-70">
+            <span id="progressLabel" data-i18n="progressStarting">Starting…</span>
+            <span id="progressPercent">0%</span>
+          </div>
+        </div>
+
+        <div id="errorBox" class="alert alert-error hidden text-sm" role="alert"></div>
+      </div>
+    </section>
+
+    <!-- ===================== Result ===================== -->
+    <section id="resultCard" class="card bg-base-100 shadow-sm hidden">
+      <div class="card-body space-y-4">
+
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <h2 class="card-title" id="resultTitle" data-i18n="resultTranscription">Transcription</h2>
+          <div class="flex flex-wrap gap-2">
+            <button class="btn btn-sm btn-outline" id="copyBtn" data-i18n="copyBtn">Copy</button>
+            <div class="join">
+              <button class="btn btn-sm btn-outline join-item" data-download="txt" data-i18n="downloadTxt">TXT</button>
+              <button class="btn btn-sm btn-outline join-item" data-download="srt" data-i18n="downloadSrt">SRT</button>
+              <button class="btn btn-sm btn-outline join-item" data-download="vtt" data-i18n="downloadVtt">VTT</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap gap-2 text-xs opacity-70" id="resultMeta"></div>
+
+        <div id="resultWarning" class="alert alert-warning hidden text-sm" role="alert"></div>
+
+        <div class="bg-base-200 rounded-box p-4 text-box" id="resultText"></div>
+
+        <div id="segmentsWrap" class="hidden">
+          <button class="btn btn-xs btn-ghost" id="segmentsToggle" data-i18n="segmentsShow">Show timecodes</button>
+          <div id="segmentsBox" class="hidden mt-3"></div>
+        </div>
+
+        <details id="originalWrap" class="collapse collapse-arrow bg-base-200 rounded-box hidden">
+          <summary class="collapse-title text-sm opacity-70" data-i18n="originalTitle">Original transcription</summary>
+          <div class="collapse-content">
+            <div class="text-box" id="originalText"></div>
+          </div>
+        </details>
+
+        <div class="flex flex-wrap items-center gap-2" id="translateAgainRow">
+          <span class="text-sm opacity-70" data-i18n="translateAgain">Translate into:</span>
+        </div>
+
+        <div id="extraTranslations" class="space-y-3"></div>
+
+        <!-- One quiet feedback line. Details appear only after a negative rating. -->
+        <div class="border-t border-base-300 pt-4">
+          <div id="feedbackAsk" class="flex flex-wrap items-center gap-2">
+            <span class="text-sm opacity-60" data-i18n="fbTitle">Was this useful?</span>
+            <button class="btn btn-xs btn-ghost" id="fbUp" type="button">👍 <span data-i18n="fbGood">Good</span></button>
+            <button class="btn btn-xs btn-ghost" id="fbDown" type="button">👎 <span data-i18n="fbBad">Poor</span></button>
+            <button class="btn btn-xs btn-ghost" id="fbIssue" type="button">🛠 <span data-i18n="fbReport">Report a problem</span></button>
+          </div>
+
+          <div id="feedbackDetail" class="hidden mt-3 space-y-2">
+            <div class="text-sm opacity-70" id="fbDetailTitle" data-i18n="fbReason">What went wrong?</div>
+            <div class="flex flex-wrap gap-2" id="fbReasons">
+              <button class="btn btn-xs btn-outline" data-cat="stt" type="button" data-i18n="fbStt">Bad transcription</button>
+              <button class="btn btn-xs btn-outline" data-cat="translation" type="button" data-i18n="fbTranslation">Bad translation</button>
+              <button class="btn btn-xs btn-outline" data-cat="download" type="button" data-i18n="fbDownload">Download problem</button>
+              <button class="btn btn-xs btn-outline" data-cat="speed" type="button" data-i18n="fbSpeed">Too slow</button>
+              <button class="btn btn-xs btn-outline" data-cat="other" type="button" data-i18n="fbOther">Other</button>
+            </div>
+            <textarea id="fbComment" class="textarea textarea-bordered w-full text-sm" rows="2" data-i18n-placeholder="fbComment"></textarea>
+            <button class="btn btn-sm btn-primary" id="fbSend" type="button" data-i18n="fbSend">Send</button>
+          </div>
+
+          <div id="feedbackThanks" class="hidden text-sm text-success" data-i18n="fbThanks">Thanks!</div>
+        </div>
+
+        <div>
+          <button class="btn btn-ghost btn-sm" id="newJobBtn" data-i18n="newJobBtn">Start another</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="text-center text-sm opacity-50 py-8">
+    <a href="/" class="link link-hover">TilTap</a> · <a href="/api-docs" class="link link-hover" data-i18n="footerApi">API docs</a>
+  </footer>
+
+  <script src="/site/assets/i18n.js"></script>
+  <script src="/site/assets/app.js"></script>
+</body>
+</html>

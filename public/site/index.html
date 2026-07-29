@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="corporate">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TilTap — speech to text and translation for Central Asian languages</title>
+  <meta name="description" content="Transcribe audio, video, YouTube, TikTok and Instagram Reels in Kyrgyz, Tajik, Uzbek, Russian and English — and translate the result. Free in the browser, or as a Telegram and WhatsApp bot.">
+  <meta property="og:title" content="TilTap — speech to text and translation">
+  <meta property="og:description" content="Accurate transcription and translation for Kyrgyz, Tajik, Uzbek, Russian and English.">
+  <meta property="og:type" content="website">
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css" rel="stylesheet" type="text/css" />
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link rel="stylesheet" href="/site/assets/site.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗣️</text></svg>">
+</head>
+<body class="min-h-screen bg-base-100">
+
+  <!-- ======================= Nav ======================= -->
+  <header class="navbar bg-base-100/80 backdrop-blur sticky top-0 z-50 border-b border-base-300 px-4 lg:px-8">
+    <div class="navbar-start">
+      <div class="dropdown lg:hidden">
+        <div tabindex="0" role="button" class="btn btn-ghost btn-sm px-2" aria-label="Menu">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
+        </div>
+        <ul tabindex="0" class="menu menu-sm dropdown-content bg-base-100 rounded-box z-50 mt-3 w-56 p-2 shadow">
+          <li><a href="#features" data-i18n="navFeatures">Features</a></li>
+          <li><a href="#languages" data-i18n="navLanguages">Languages</a></li>
+          <li><a href="#how" data-i18n="navHow">How it works</a></li>
+          <li><a href="#bots" data-i18n="navBots">Bots</a></li>
+          <li><a href="#faq" data-i18n="navFaq">FAQ</a></li>
+          <!-- The toggle lives here on small screens; there is no room for it
+               beside the logo at 375 px. -->
+          <li class="sm:hidden"><a id="themeToggleMobile"><span id="themeIconMobile">🌙</span> Theme</a></li>
+        </ul>
+      </div>
+      <a href="/" class="btn btn-ghost text-lg sm:text-xl font-bold gap-2 px-2">
+        <span aria-hidden="true">🗣️</span> TilTap
+      </a>
+    </div>
+
+    <div class="navbar-center hidden lg:flex">
+      <ul class="menu menu-horizontal px-1 gap-1">
+        <li><a href="#features" data-i18n="navFeatures">Features</a></li>
+        <li><a href="#languages" data-i18n="navLanguages">Languages</a></li>
+        <li><a href="#how" data-i18n="navHow">How it works</a></li>
+        <li><a href="#bots" data-i18n="navBots">Bots</a></li>
+        <li><a href="#faq" data-i18n="navFaq">FAQ</a></li>
+      </ul>
+    </div>
+
+    <div class="navbar-end gap-1">
+      <button class="btn btn-ghost btn-sm btn-circle hidden sm:inline-flex" id="themeToggle" aria-label="Toggle theme">
+        <span id="themeIcon">🌙</span>
+      </button>
+      <div class="dropdown dropdown-end">
+        <div tabindex="0" role="button" class="btn btn-sm btn-ghost">
+          <span id="currentLangFlag">🇬🇧</span>
+          <span class="hidden sm:inline" id="currentLangLabel">English</span>
+        </div>
+        <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-50 w-52 p-2 shadow" id="langMenu"></ul>
+      </div>
+      <a href="/app" class="btn btn-primary btn-sm whitespace-nowrap" data-i18n="navOpenApp">Open the app</a>
+    </div>
+  </header>
+
+  <!-- ======================= Hero ======================= -->
+  <section class="hero-gradient">
+    <div class="max-w-6xl mx-auto px-4 lg:px-8 py-16 lg:py-24">
+      <div class="max-w-3xl">
+        <!-- Not a daisyUI badge: this text wraps on narrow screens, and a badge
+             keeps its one-line height, so the border would cut through it. -->
+        <p class="inline-block rounded-full border border-base-content/25 px-4 py-1.5 text-sm mb-5" data-i18n="heroBadge">Kyrgyz · Tajik · Uzbek · Russian · English</p>
+        <h1 class="text-4xl lg:text-6xl font-bold leading-tight tracking-tight" data-i18n="heroTitle">
+          Turn speech into text — in the languages the big models forget
+        </h1>
+        <p class="mt-6 text-lg opacity-75 leading-relaxed" data-i18n="heroSubtitle">
+          Upload audio or video, or paste a YouTube, TikTok or Instagram Reels link.
+        </p>
+        <div class="mt-8 flex flex-wrap gap-3">
+          <a href="/app" class="btn btn-primary btn-lg" data-i18n="heroCta">Try it in the browser</a>
+          <a href="#" class="btn btn-outline btn-lg hidden gap-2" id="heroTelegram" target="_blank" rel="noopener">
+            <span aria-hidden="true">✈️</span><span data-i18n="heroCtaTelegram">Open in Telegram</span>
+          </a>
+          <a href="#" class="btn btn-outline btn-lg hidden gap-2" id="heroWhatsApp" target="_blank" rel="noopener">
+            <span aria-hidden="true">💬</span><span data-i18n="heroCtaWhatsApp">Open in WhatsApp</span>
+          </a>
+        </div>
+        <p class="mt-4 text-sm opacity-60" data-i18n="heroNote">No sign-up. Files up to 25 MB.</p>
+      </div>
+
+      <div class="mt-12 flex flex-wrap gap-2">
+        <span class="badge badge-ghost badge-lg gap-1">🇰🇬 <span data-i18n="langKy">Kyrgyz</span></span>
+        <span class="badge badge-ghost badge-lg gap-1">🇹🇯 <span data-i18n="langTg">Tajik</span></span>
+        <span class="badge badge-ghost badge-lg gap-1">🇺🇿 <span data-i18n="langUz">Uzbek</span></span>
+        <span class="badge badge-ghost badge-lg gap-1">🇷🇺 <span data-i18n="langRu">Russian</span></span>
+        <span class="badge badge-ghost badge-lg gap-1">🇬🇧 <span data-i18n="langEn">English</span></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= Features ======================= -->
+  <section id="features" class="section max-w-6xl mx-auto px-4 lg:px-8 py-16 lg:py-24">
+    <h2 class="text-3xl lg:text-4xl font-bold" data-i18n="featuresTitle">What it does</h2>
+    <p class="mt-3 opacity-70" data-i18n="featuresSubtitle">Everything the bots can do, available here too.</p>
+
+    <div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 mt-10">
+      <div class="card bg-base-200/60 border border-base-300">
+        <div class="card-body">
+          <div class="text-3xl" aria-hidden="true">🎙️</div>
+          <h3 class="card-title text-lg" data-i18n="f1Title">Speech recognition</h3>
+          <p class="opacity-75 text-sm leading-relaxed" data-i18n="f1Body"></p>
+        </div>
+      </div>
+      <div class="card bg-base-200/60 border border-base-300">
+        <div class="card-body">
+          <div class="text-3xl" aria-hidden="true">🔒</div>
+          <h3 class="card-title text-lg" data-i18n="f2Title">Runs on our own servers</h3>
+          <p class="opacity-75 text-sm leading-relaxed" data-i18n="f2Body"></p>
+        </div>
+      </div>
+      <div class="card bg-base-200/60 border border-base-300">
+        <div class="card-body">
+          <div class="text-3xl" aria-hidden="true">🔗</div>
+          <h3 class="card-title text-lg" data-i18n="f3Title">Media links</h3>
+          <p class="opacity-75 text-sm leading-relaxed" data-i18n="f3Body"></p>
+        </div>
+      </div>
+      <div class="card bg-base-200/60 border border-base-300">
+        <div class="card-body">
+          <div class="text-3xl" aria-hidden="true">⏱️</div>
+          <h3 class="card-title text-lg" data-i18n="f4Title">Timecoded segments</h3>
+          <p class="opacity-75 text-sm leading-relaxed" data-i18n="f4Body"></p>
+        </div>
+      </div>
+      <div class="card bg-base-200/60 border border-base-300">
+        <div class="card-body">
+          <div class="text-3xl" aria-hidden="true">🌍</div>
+          <h3 class="card-title text-lg" data-i18n="f5Title">Careful translation</h3>
+          <p class="opacity-75 text-sm leading-relaxed" data-i18n="f5Body"></p>
+        </div>
+      </div>
+      <div class="card bg-base-200/60 border border-base-300">
+        <div class="card-body">
+          <div class="text-3xl" aria-hidden="true">💬</div>
+          <h3 class="card-title text-lg" data-i18n="f6Title">Five interface languages</h3>
+          <p class="opacity-75 text-sm leading-relaxed" data-i18n="f6Body"></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= Languages ======================= -->
+  <section id="languages" class="section bg-base-200/50 border-y border-base-300">
+    <div class="max-w-6xl mx-auto px-4 lg:px-8 py-16 lg:py-24">
+      <h2 class="text-3xl lg:text-4xl font-bold" data-i18n="langsTitle">Supported languages</h2>
+      <p class="mt-3 opacity-70" data-i18n="langsSubtitle">Transcription and translation, in any direction between these.</p>
+
+      <div class="table-scroll mt-8 rounded-box border border-base-300 bg-base-100">
+        <table class="table">
+          <thead>
+            <tr>
+              <th data-i18n="navLanguages">Language</th>
+              <th data-i18n="langTranscribe">Transcription</th>
+              <th data-i18n="langTranslate">Translation</th>
+              <th data-i18n="langEngine">Engine</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="whitespace-nowrap">🇰🇬 <span data-i18n="langKy">Kyrgyz</span></td>
+              <td>✅</td><td>✅</td>
+              <td class="text-sm opacity-70">GigaAM Multilingual CTC</td>
+            </tr>
+            <tr>
+              <td class="whitespace-nowrap">🇹🇯 <span data-i18n="langTg">Tajik</span></td>
+              <td>✅</td><td>✅</td>
+              <td class="text-sm opacity-70">Whisper (Tajik fine-tune)</td>
+            </tr>
+            <tr>
+              <td class="whitespace-nowrap">🇺🇿 <span data-i18n="langUz">Uzbek</span></td>
+              <td>✅</td><td>✅</td>
+              <td class="text-sm opacity-70">GigaAM Multilingual CTC</td>
+            </tr>
+            <tr>
+              <td class="whitespace-nowrap">🇷🇺 <span data-i18n="langRu">Russian</span></td>
+              <td>✅</td><td>✅</td>
+              <td class="text-sm opacity-70">GigaAM Multilingual CTC</td>
+            </tr>
+            <tr>
+              <td class="whitespace-nowrap">🇬🇧 <span data-i18n="langEn">English</span></td>
+              <td>✅</td><td>✅</td>
+              <td class="text-sm opacity-70">Whisper large-v3-turbo</td>
+            </tr>
+            <tr>
+              <td class="whitespace-nowrap">🇺🇿 <span data-i18n="langUzCyrl">Uzbek (Cyrillic)</span></td>
+              <td class="opacity-50">—</td><td>✅</td>
+              <td class="text-sm opacity-70" data-i18n="langTargetOnly">Translation target only</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= How it works ======================= -->
+  <section id="how" class="section max-w-6xl mx-auto px-4 lg:px-8 py-16 lg:py-24">
+    <h2 class="text-3xl lg:text-4xl font-bold" data-i18n="howTitle">How it works</h2>
+    <div class="grid gap-6 md:grid-cols-3 mt-10">
+      <div class="flex gap-4">
+        <div class="badge badge-primary badge-lg font-bold shrink-0">1</div>
+        <div>
+          <h3 class="font-semibold text-lg" data-i18n="how1Title">Send the audio</h3>
+          <p class="opacity-75 text-sm mt-1 leading-relaxed" data-i18n="how1Body"></p>
+        </div>
+      </div>
+      <div class="flex gap-4">
+        <div class="badge badge-primary badge-lg font-bold shrink-0">2</div>
+        <div>
+          <h3 class="font-semibold text-lg" data-i18n="how2Title">Pick the languages</h3>
+          <p class="opacity-75 text-sm mt-1 leading-relaxed" data-i18n="how2Body"></p>
+        </div>
+      </div>
+      <div class="flex gap-4">
+        <div class="badge badge-primary badge-lg font-bold shrink-0">3</div>
+        <div>
+          <h3 class="font-semibold text-lg" data-i18n="how3Title">Get the text</h3>
+          <p class="opacity-75 text-sm mt-1 leading-relaxed" data-i18n="how3Body"></p>
+        </div>
+      </div>
+    </div>
+    <div class="mt-10">
+      <a href="/app" class="btn btn-primary" data-i18n="heroCta">Try it in the browser</a>
+    </div>
+  </section>
+
+  <!-- ======================= Bots ======================= -->
+  <section id="bots" class="section bg-base-200/50 border-y border-base-300">
+    <div class="max-w-6xl mx-auto px-4 lg:px-8 py-16 lg:py-24">
+      <h2 class="text-3xl lg:text-4xl font-bold" data-i18n="botsTitle">Prefer a chat?</h2>
+      <p class="mt-3 opacity-70" data-i18n="botsSubtitle">The same engine, in the messenger you already use.</p>
+
+      <div class="grid gap-5 md:grid-cols-2 mt-10">
+        <div class="card bg-base-100 border border-base-300">
+          <div class="card-body">
+            <h3 class="card-title gap-2"><span aria-hidden="true">✈️</span> Telegram</h3>
+            <p class="opacity-75 text-sm leading-relaxed" data-i18n="botTelegramBody"></p>
+            <div class="card-actions mt-3">
+              <a href="#" class="btn btn-primary btn-sm hidden" id="botTelegramLink" target="_blank" rel="noopener" data-i18n="botOpen">Open</a>
+              <span class="btn btn-disabled btn-sm" id="botTelegramSoon" data-i18n="botSoon">Coming soon</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card bg-base-100 border border-base-300">
+          <div class="card-body">
+            <h3 class="card-title gap-2"><span aria-hidden="true">💬</span> WhatsApp</h3>
+            <p class="opacity-75 text-sm leading-relaxed" data-i18n="botWhatsAppBody"></p>
+            <div class="card-actions mt-3">
+              <a href="#" class="btn btn-primary btn-sm hidden" id="botWhatsAppLink" target="_blank" rel="noopener" data-i18n="botOpen">Open</a>
+              <span class="btn btn-disabled btn-sm" id="botWhatsAppSoon" data-i18n="botSoon">Coming soon</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= FAQ ======================= -->
+  <section id="faq" class="section max-w-4xl mx-auto px-4 lg:px-8 py-16 lg:py-24">
+    <h2 class="text-3xl lg:text-4xl font-bold" data-i18n="faqTitle">Questions</h2>
+    <div class="mt-8 space-y-3">
+      <div class="collapse collapse-arrow bg-base-200/60 border border-base-300">
+        <input type="checkbox" checked>
+        <div class="collapse-title font-medium" data-i18n="faq1Q"></div>
+        <div class="collapse-content text-sm opacity-80 leading-relaxed"><p data-i18n="faq1A"></p></div>
+      </div>
+      <div class="collapse collapse-arrow bg-base-200/60 border border-base-300">
+        <input type="checkbox">
+        <div class="collapse-title font-medium" data-i18n="faq2Q"></div>
+        <div class="collapse-content text-sm opacity-80 leading-relaxed"><p data-i18n="faq2A"></p></div>
+      </div>
+      <div class="collapse collapse-arrow bg-base-200/60 border border-base-300">
+        <input type="checkbox">
+        <div class="collapse-title font-medium" data-i18n="faq3Q"></div>
+        <div class="collapse-content text-sm opacity-80 leading-relaxed"><p data-i18n="faq3A"></p></div>
+      </div>
+      <div class="collapse collapse-arrow bg-base-200/60 border border-base-300">
+        <input type="checkbox">
+        <div class="collapse-title font-medium" data-i18n="faq4Q"></div>
+        <div class="collapse-content text-sm opacity-80 leading-relaxed"><p data-i18n="faq4A"></p></div>
+      </div>
+      <div class="collapse collapse-arrow bg-base-200/60 border border-base-300">
+        <input type="checkbox">
+        <div class="collapse-title font-medium" data-i18n="faq5Q"></div>
+        <div class="collapse-content text-sm opacity-80 leading-relaxed"><p data-i18n="faq5A"></p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= Footer ======================= -->
+  <footer class="footer sm:footer-horizontal bg-base-200 text-base-content p-10 border-t border-base-300">
+    <aside class="max-w-sm">
+      <span class="text-2xl" aria-hidden="true">🗣️</span>
+      <p class="font-bold text-lg">TilTap</p>
+      <p class="opacity-70 text-sm" data-i18n="footerTagline"></p>
+    </aside>
+    <nav>
+      <h6 class="footer-title" data-i18n="footerProduct">Product</h6>
+      <a class="link link-hover" href="/app" data-i18n="navOpenApp">Open the app</a>
+      <a class="link link-hover" href="#features" data-i18n="navFeatures">Features</a>
+      <a class="link link-hover" href="#languages" data-i18n="navLanguages">Languages</a>
+      <a class="link link-hover hidden" href="#" id="footerTelegram" target="_blank" rel="noopener">Telegram</a>
+      <a class="link link-hover hidden" href="#" id="footerWhatsApp" target="_blank" rel="noopener">WhatsApp</a>
+    </nav>
+    <nav>
+      <h6 class="footer-title" data-i18n="footerResources">Resources</h6>
+      <a class="link link-hover" href="/api-docs" data-i18n="footerApi">API docs</a>
+      <a class="link link-hover" href="/web/" data-i18n="footerWebTool">Classic web tool</a>
+      <a class="link link-hover" href="/health">Status</a>
+    </nav>
+  </footer>
+
+  <script src="/site/assets/i18n.js"></script>
+  <script>
+    // Theme: follow the system by default, remember an explicit choice.
+    const THEMES = { light: "corporate", dark: "business" };
+    function applyTheme(mode) {
+      document.documentElement.dataset.theme = THEMES[mode];
+      const icon = mode === "dark" ? "☀️" : "🌙";
+      document.getElementById("themeIcon").textContent = icon;
+      document.getElementById("themeIconMobile").textContent = icon;
+      localStorage.setItem("tiltap_theme", mode);
+    }
+    const storedTheme = localStorage.getItem("tiltap_theme");
+    applyTheme(storedTheme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
+    const toggleTheme = () =>
+      applyTheme(document.documentElement.dataset.theme === THEMES.dark ? "light" : "dark");
+    document.getElementById("themeToggle").addEventListener("click", toggleTheme);
+    document.getElementById("themeToggleMobile").addEventListener("click", toggleTheme);
+
+    initLanguageSwitcher();
+
+    // Only advertise a channel this deployment actually has configured.
+    loadSiteConfig().then((cfg) => {
+      if (cfg.channels?.telegram && cfg.links?.telegram) {
+        for (const id of ["heroTelegram", "botTelegramLink", "footerTelegram"]) {
+          const el = document.getElementById(id);
+          el.href = cfg.links.telegram;
+          el.classList.remove("hidden");
+        }
+        document.getElementById("botTelegramSoon").classList.add("hidden");
+      }
+      if (cfg.channels?.whatsapp && cfg.links?.whatsapp) {
+        for (const id of ["heroWhatsApp", "botWhatsAppLink", "footerWhatsApp"]) {
+          const el = document.getElementById(id);
+          el.href = cfg.links.whatsapp;
+          el.classList.remove("hidden");
+        }
+        document.getElementById("botWhatsAppSoon").classList.add("hidden");
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,1263 @@
+import { logger } from "../utils/logger";
+import { config } from "../config";
+import type { InlineKeyboardButton } from "../types";
+import {
+  ensureUser,
+  getUserByChatId,
+  updateUserPreferences,
+  type User,
+} from "../db/repos";
+import {
+  setPendingAction as setPendingActionDb,
+  deletePendingAction as deletePendingActionDb,
+  deleteExpiredPendingActions,
+  listPendingActions,
+  type PendingActionRow,
+} from "../db/repos/pendingActionRepo";
+
+const TELEGRAM_API = `https://api.telegram.org/bot${config.TELEGRAM_BOT_TOKEN}`;
+
+export const MAX_MESSAGE_LENGTH = 4000;
+export const TEXT_FILE_THRESHOLD = 3900;
+
+export const SUPPORTED_LANGUAGES = ["ky", "tg", "uz", "en", "ru", "uz_cyrl"] as const;
+export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
+
+// Languages that can be used as a transcription/interface language.
+// uz_cyrl is translation-target only (output script variant).
+export const SOURCE_LANGUAGES = ["ky", "tg", "uz", "en", "ru"] as const;
+export const INTERFACE_LANGUAGES = ["ky", "tg", "uz", "en", "ru"] as const;
+
+export const LANGUAGE_LABELS: Record<SupportedLanguage, string> = {
+  ky: "Кыргызча",
+  tg: "Тоҷикӣ",
+  uz: "O'zbekcha",
+  en: "English",
+  ru: "Русский",
+  uz_cyrl: "Ўзбекча (Кирил)",
+};
+
+export const LANGUAGE_FLAGS: Record<SupportedLanguage, string> = {
+  ky: "🇰🇬",
+  tg: "🇹🇯",
+  uz: "🇺🇿",
+  en: "🇬🇧",
+  ru: "🇷🇺",
+  uz_cyrl: "🇺🇿",
+};
+
+export const INTERFACE_LANGUAGE_NAMES: Record<SupportedLanguage, string> = {
+  ky: "Кыргызча",
+  tg: "Тоҷикӣ",
+  uz: "O'zbekcha",
+  en: "English",
+  ru: "Русский",
+  uz_cyrl: "Ўзбекча (Кирил)",
+};
+
+// ---------------------------------------------------------------------------
+// Translations
+// ---------------------------------------------------------------------------
+const TRANSLATIONS: Record<string, Partial<Record<SupportedLanguage, string>>> = {
+  welcome: {
+    ky: "<b>TilTap</b>ке кош келиңиз!\n\nМен аудио, видео жана төмөнкү шилтемелердеги сүйлөмдү текстке айлантам:\n• YouTube\n• TikTok\n• Instagram Reels\n\nКыргызча, тоҷикӣ, ўзбекча, русча жана англисча иштеиет.\n\nЖөн гана мага жибериңиз: файл, үн кат же шилтеме.",
+    tg: "Хуш омадед ба <b>TilTap</b>!\n\nМан аудио, видео ва пайвандҳои зеринро матн мекунам:\n• YouTube\n• TikTok\n• Instagram Reels\n\nБа забонҳои қирғизӣ, тоҷикӣ, ӯзбекӣ, русӣ ва англисӣ.\n\nФақат ба ман фиристед: файл, садо ё пайванд.",
+    uz: "<b>TilTap</b>ga xush kelibsiz!\n\nMen audio, video va quyidagi havolalardagi nutqni matnga aylantiraman:\n• YouTube\n• TikTok\n• Instagram Reels\n\nQirg'iz, tojik, o'zbek, rus va ingliz tillarida.\n\nShunchaki menga yuboring: fayl, ovozli xabar yoki havola.",
+    en: "Welcome to <b>TilTap</b>!\n\nI turn speech from audio, video, and the following links into text:\n• YouTube\n• TikTok\n• Instagram Reels\n\nIn Kyrgyz, Tajik, Uzbek, Russian, and English.\n\nJust send me a file, voice message, or link.",
+    ru: "Добро пожаловать в <b>TilTap</b>!\n\nЯ превращаю речь из аудио, видео и следующих ссылок в текст:\n• YouTube\n• TikTok\n• Instagram Reels\n\nПоддерживаю кыргызский, таджикский, узбекский, русский и английский.\n\nПросто отправьте мне файл, голосовое сообщение или ссылку.",
+  },
+  help: {
+    ky: "<b>Жардам</b>\n\n<b>Файл жиберүү:</b> аудио, видео, үн каттуу же документ жибериңиз. Бот тилди сурайт, андан кийин иштей баштайт.\n\n<b>Шилтемелер:</b> YouTube, TikTok, Instagram Reels шилтемелерин түз эле жибериңиз.\n\n<b>Тил орнотуулар:</b> «Орнотуулар» менен интерфейстин тилин жана которуу үчүн демейки тилди тандаңыз.\n\n<b>Командаалар:</b>\n/start — негизки меню\n/help — бул жардам\n/settings — тил орнотуулар\n/stop — активдүү процессти токтотуу",
+    tg: "<b>Кӯмак</b>\n\n<b>Фиристодани файл:</b> аудио, видео ё файл фиристед. Бот забонро пурсонда, сипас корро оғоз мекунад.\n\n<b>Пайвандҳо:</b> мустақиман YouTube, TikTok, Instagram Reels фиристед.\n\n<b>Танзимоти забон:</b> тавассути «Танзимот» забони интерфейс ва забони пешфарзи тарҷумаро интихоб кунед.\n\n<b>Дастурҳо:</b>\n/start — менюи асосӣ\n/help — ин кӯмак\n/settings — танзимоти забон\n/stop — қатъ кардани раванди фаъол",
+    uz: "<b>Yordam</b>\n\n<b>Fayl yuborish:</b> audio, video yoki hujjat yuboring. Bot tilni so'raydi, keyin ishlaydi.\n\n<b>Havolalar:</b> YouTube, TikTok, Instagram Reels havolalarini to'g'ridan-to'g'ri yuboring.\n\n<b>Til sozlamalari:</b> «Sozlamalar» orqali interfeys tilini va tarjima uchun standart tilni tanlang.\n\n<b>Buyruqlar:</b>\n/start — asosiy menyu\n/help — bu yordam\n/settings — til sozlamalari\n/stop — faol jarayonni to'xtatish",
+    en: "<b>Help</b>\n\n<b>Send a file:</b> send audio, video, voice, or a document. The bot will ask for the language, then start working.\n\n<b>Links:</b> send YouTube, TikTok, or Instagram Reels links directly.\n\n<b>Language settings:</b> use Settings to choose the interface language and default translation language.\n\n<b>Commands:</b>\n/start — main menu\n/help — this help\n/settings — language settings\n/translate — translate text\n/stop — stop active process",
+    ru: "<b>Помощь</b>\n\n<b>Отправьте файл:</b> аудио, видео, голосовое или документ. Бот спросит язык, затем начнёт работу.\n\n<b>Ссылки:</b> отправляйте ссылки на YouTube, TikTok или Instagram Reels напрямую.\n\n<b>Настройки языка:</b> через «Настройки» выберите язык интерфейса и язык перевода по умолчанию.\n\n<b>Команды:</b>\n/start — главное меню\n/help — эта помощь\n/settings — настройки языка\n/translate — перевести текст\n/stop — остановить активный процесс",
+  },
+  chooseInterfaceLanguage: {
+    ky: "Интерфейстин тилин тандаңыз:",
+    tg: "Забони интерфейсро интихоб кунед:",
+    uz: "Interfeys tilini tanlang:",
+    en: "Choose interface language:",
+    ru: "Выберите язык интерфейса:",
+  },
+  chooseSourceLanguage: {
+    ky: "Бул жазууда кайсы тилде сүйлөнүп жатат? Тандаңыз:",
+    tg: "Дар ин сабт ба кадом забон сухан меравад? Интихоб кунед:",
+    uz: "Bu yozuvda qaysi tilda gapirilmoqda? Tanlang:",
+    en: "What language is spoken in this recording? Choose:",
+    ru: "На каком языке говорят в этой записи? Выберите:",
+  },
+  chooseTargetLanguage: {
+    ky: "Жыйынтыкты кайсы тилге которолосуңуз? Эгер которбоой болсоңуз, «Которбоой» баскычын басыңыз.",
+    tg: "Натиҷаро ба кадом забон тарҷума кунам? Агар тарҷума лозим набошад, «Бе тарҷума»-ро пахш кунед.",
+    uz: "Natijani qaysi tilga tarjima qilay? Agar tarjima kerak bo'lmasa, «Tarjimasiz» tugmasini bosing.",
+    en: "What language should I translate the result into? If you don't need translation, tap No translation.",
+    ru: "На какой язык перевести результат? Если перевод не нужен, нажмите «Без перевода».",
+  },
+  sendYoutubeLink: {
+    ky: "YouTube, TikTok же Instagram Reels шилтемесин жибериңиз:",
+    tg: "Пайванди YouTube, TikTok ё Instagram Reels-ро фиристед:",
+    uz: "YouTube, TikTok yoki Instagram Reels havolasini yuboring:",
+    en: "Send me a YouTube, TikTok, or Instagram Reels link:",
+    ru: "Отправьте ссылку на YouTube, TikTok или Instagram Reels:",
+  },
+  transcribing: {
+    ky: "⏳ Распознаоо жатат...",
+    tg: "⏳ Транскрипция мешавад...",
+    uz: "⏳ Transkripsiya qilinmoqda...",
+    en: "⏳ Transcribing...",
+    ru: "⏳ Распознаю...",
+  },
+  translating: {
+    ky: "⏳ Которулуп жатат...",
+    tg: "⏳ Тарҷума мешавад...",
+    uz: "⏳ Tarjima qilinmoqda...",
+    en: "⏳ Translating...",
+    ru: "⏳ Перевожу...",
+  },
+  improvingText: {
+    ky: "Текстти тазалап жатам...",
+    tg: "Тоза кардани матн...",
+    uz: "Matnni tozalash...",
+    en: "Improving text quality...",
+    ru: "Улучшаю качество текста...",
+  },
+  sessionExpired: {
+    ky: "Сессия аяктады. Файлды же YouTube шилтемесин кайра жибериңиз.",
+    tg: "Сессия ба охир расид. Лутфан файл ё пайванди YouTube-ро дубора фиристед.",
+    uz: "Sessiya tugadi. Iltimos, faylni yoki YouTube havolasini qayta yuboring.",
+    en: "Session expired. Please send the file or YouTube link again.",
+    ru: "Сессия истекла. Отправьте файл или ссылку на YouTube заново.",
+  },
+  fixtureNotFound: {
+    ky: "Тест үчүн аудио табылган жок. Администраторго кайрылыңыз.",
+    tg: "Барои тест аудио ёфт нашуд. Лутфан бо администратор тамос гиред.",
+    uz: "Test uchun audio topilmadi. Iltimos, administratorga murojaat qiling.",
+    en: "Test audio not found. Please contact the administrator.",
+    ru: "Тестовое аудио не найдено. Обратитесь к администратору.",
+  },
+  stageStarting: {
+    ky: "Баштап жатам...",
+    tg: "Оғоз карда истодаем...",
+    uz: "Boshlanmoqda...",
+    en: "Starting...",
+    ru: "Начинаю...",
+  },
+  stageDownload: {
+    ky: "YouTube'дан жүктөп жатам...",
+    tg: "Аз YouTube боргирӣ мекунам...",
+    uz: "YouTube'dan yuklanmoqda...",
+    en: "Downloading from YouTube...",
+    ru: "Скачиваю с YouTube...",
+  },
+  stageTranscribe: {
+    ky: "Распознаоо жатам...",
+    tg: "Транскрипция мекунам...",
+    uz: "Transkripsiya qilinmoqda...",
+    en: "Transcribing...",
+    ru: "Распознаю...",
+  },
+  testHeader: {
+    ky: "TilTap такырыкты текшерүү",
+    tg: "Санҷиши дақиқии TilTap",
+    uz: "TilTap aniqlik testi",
+    en: "TilTap Accuracy Test",
+    ru: "Тест точности TilTap",
+  },
+  testPreparing: {
+    ky: "Тестти даярдап жатам...",
+    tg: "Омода кардани санҷиш...",
+    uz: "Test tayyorlanmoqda...",
+    en: "Preparing test...",
+    ru: "Подготовка теста...",
+  },
+  testDownloading: {
+    ky: "YouTube'дан аудио жүктөп жатам...",
+    tg: "Аз YouTube аудио боргирӣ мекунам...",
+    uz: "YouTube'dan audio yuklanmoqda...",
+    en: "Downloading audio from YouTube...",
+    ru: "Загрузка аудио с YouTube...",
+  },
+  testRecognizing: {
+    ky: "Сүйлөмдү распознаоо жатам...",
+    tg: "Транскрипцияи сухан...",
+    uz: "Nutqni transkripsiya qilish...",
+    en: "Recognizing speech...",
+    ru: "Распознавание речи...",
+  },
+  testScoring: {
+    ky: "Такырыкты эсептөө...",
+    tg: "Ҳисобкунии дақиқӣ...",
+    uz: "Aniqlikni hisoblash...",
+    en: "Calculating accuracy...",
+    ru: "Подсчет точности...",
+  },
+  testCompleted: {
+    ky: "Тест аяктады",
+    tg: "Санҷиш анҷом ёфт",
+    uz: "Test tugadi",
+    en: "Test completed",
+    ru: "Тест завершен",
+  },
+  recognizedText: {
+    ky: "Распознанный текст",
+    tg: "Матни садокашонишуда",
+    uz: "Tanilgan matn",
+    en: "Recognized text",
+    ru: "Распознанный текст",
+  },
+  referenceText: {
+    ky: "Эталондуу текст",
+    tg: "Матни эталонӣ",
+    uz: "Etalon matn",
+    en: "Reference text",
+    ru: "Эталонный текст",
+  },
+  noSpeech: {
+    ky: "Бул файлда сүйлөм табылган жок. Башка файл жибериңиз.",
+    tg: "Дар ин файл сухан ёфт нашуд. Лутфан файли дигар фиристед.",
+    uz: "Ushbu faylda nutq topilmadi. Boshqa fayl yuboring.",
+    en: "No speech detected in this file. Try another file.",
+    ru: "В этом файле не удалось распознать речь. Попробуйте другой файл.",
+  },
+  transcriptionFailed: {
+    ky: "Распознаоо ишке ашкан жок: {error}. Кайра аракет кылыңыз же башка файл жибериңиз.",
+    tg: "Транскрипция иҷро нашуд: {error}. Лутфан аз нав кӯшиш кунед ё файли дигар фиристед.",
+    uz: "Transkripsiya amalga oshmadi: {error}. Qaytadan urinib ko'ring yoki boshqa fayl yuboring.",
+    en: "Transcription failed: {error}. Please try again or send another file.",
+    ru: "Не удалось распознать речь: {error}. Попробуйте ещё раз или отправьте другой файл.",
+  },
+  translationFailed: {
+    ky: "Которуу ишке ашкан жок: {error}. Башка убакытта аракет кылыңыз.",
+    tg: "Тарҷума иҷро нашуд: {error}. Лутфан дереъ дигар вақт кӯшиш кунед.",
+    uz: "Tarjima amalga oshmadi: {error}. Iltimos, keyinroq qaytadan urinib ko'ring.",
+    en: "Translation failed: {error}. Please try again later.",
+    ru: "Не удалось перевести: {error}. Попробуйте позже.",
+  },
+  processingStopped: {
+    ky: "Процесс токтотулду. Жаңыдан баштоо үчүн файл же шилтеме жибериңиз.",
+    tg: "Процесс қатъ карда шуд. Барои оғози нав файл ё пайванд фиристед.",
+    uz: "Jarayon to'xtatildi. Yangidan boshlash uchun fayl yoki havola yuboring.",
+    en: "Processing stopped. Send a file or link to start again.",
+    ru: "Обработка остановлена. Чтобы начать заново, отправьте файл или ссылку.",
+  },
+  chooseTestLanguage: {
+    ky: "Кайсы тилде текшеребиз?",
+    tg: "Ба кадом забон санҷиш гузаронем?",
+    uz: "Qaysi tilda sinaymiz?",
+    en: "Which language should we test?",
+    ru: "На каком языке проверим?",
+  },
+  noTranslation: {
+    ky: "Которбоой",
+    tg: "Бе тарҷума",
+    uz: "Tarjimasiz",
+    en: "No translation",
+    ru: "Без перевода",
+  },
+  testAllLanguages: {
+    ky: "Бардык тилдер",
+    tg: "Ҳамаи забонҳо",
+    uz: "Barcha tillar",
+    en: "All languages",
+    ru: "Все языки",
+  },
+  nothingToStop: {
+    ky: "Азыр эч нерсе иштеп жаткан жок. Токтотуу үчүн эч нерсе жок.",
+    tg: "Ҳозир чизе кор карда истода нест. Чизе барои қатъ кардан нест.",
+    uz: "Hozir hech narsa ishlamayapti. To'xtatish uchun hech narsa yo'q.",
+    en: "Nothing is running right now. There is no process to stop.",
+    ru: "Сейчас ничего не обрабатывается. Останавливать нечего.",
+  },
+  processAlreadyRunning: {
+    ky: "Сизде башка иштеп жаткан процесс бар. Аны токтотуп, жаңысын баштайбызбы?",
+    tg: "Шумо раванди дигар доред, ки кор мекунад. Оё онро қатъ карда, навро оғоз мекунем?",
+    uz: "Sizda boshqa ishlayotgan jarayon bor. Uni to'xtatib, yangisini boshlaymizmi?",
+    en: "You already have another process running. Stop it and start a new one?",
+    ru: "У вас уже идёт другая обработка. Остановить её и начать новую?",
+  },
+  startNew: {
+    ky: "Ооба, жаңысын баштоо",
+    tg: "Ҳа, навро оғоз кун",
+    uz: "Ha, yangisini boshlash",
+    en: "Yes, start new",
+    ru: "Да, начать новую",
+  },
+  mainMenuHint: {
+    ky: "Жөн гана аудио, видео же шилтеме жибериңиз.\nКолдойбуз: YouTube, TikTok, Instagram Reels.\n\nТөмөнкү баскычтарды колдонуңуз:",
+    tg: "Фақат аудио, видео ё пайванд фиристед.\nДастгирӣ мекунем: YouTube, TikTok, Instagram Reels.\n\nАз тугмаҳои зерин истифода баред:",
+    uz: "Shunchaki audio, video yoki havola yuboring.\nQo'llab-quvvatlaymiz: YouTube, TikTok, Instagram Reels.\n\nQuyidagi tugmalardan foydalaning:",
+    en: "Just send audio, video, or a link.\nSupported: YouTube, TikTok, Instagram Reels.\n\nUse the buttons below:",
+    ru: "Просто отправьте аудио, видео или ссылку.\nПоддерживаем: YouTube, TikTok, Instagram Reels.\n\nИспользуйте кнопки ниже:",
+  },
+  confirmStart: {
+    ky: "Тил жазууда: {source}\nКоторуу: {target}\n\nБаары туурабы? Распознаоону баштоо үчүн ▶ Баштоо баскычын басыңыз.",
+    tg: "Забони сабт: {source}\nТарҷума: {target}\n\nҲамааш дуруст? Барои оғози транскрипция ▶ Оғозро пахш кунед.",
+    uz: "Yozuv tili: {source}\nTarjima: {target}\n\nHammasi to'g'rimi? Transkripsiyani boshlash uchun ▶ Boshlash tugmasini bosing.",
+    en: "Language in recording: {source}\nTranslation: {target}\n\nEverything correct? Tap ▶ Start to begin transcription.",
+    ru: "Язык в записи: {source}\nПеревод: {target}\n\nВсё верно? Нажмите ▶ Начать, чтобы запустить распознавание.",
+  },
+  confirmStartNoTranslation: {
+    ky: "Тил жазууда: {source}\nКоторуу: керек эмес\n\nБаары туурабы? Распознаоону баштоо үчүн ▶ Баштоо баскычын басыңыз.",
+    tg: "Забони сабт: {source}\nТарҷума: лозим нест\n\nҲамааш дуруст? Барои оғози транскрипция ▶ Оғозро пахш кунед.",
+    uz: "Yozuv tili: {source}\nTarjima: kerak emas\n\nHammasi to'g'rimi? Transkripsiyani boshlash uchun ▶ Boshlash tugmasini bosing.",
+    en: "Language in recording: {source}\nTranslation: not needed\n\nEverything correct? Tap ▶ Start to begin transcription.",
+    ru: "Язык в записи: {source}\nПеревод: не нужен\n\nВсё верно? Нажмите ▶ Начать, чтобы запустить распознавание.",
+  },
+  mediaPreview: {
+    ky: "Видео табылды: <b>{title}</b>\n\nАлгач, видеодо кайсы тилде сүйлөнүп жатканын тандаңыз. Андан кийин ▶ Баштоо баскычын басыңыз.",
+    tg: "Видео ёфт шуд: <b>{title}</b>\n\nАввал забони сабтро интихоб кунед, ки дар видео сухан меравад. Сипас ▶ Оғозро пахш кунед.",
+    uz: "Video topildi: <b>{title}</b>\n\nAvval videoda qaysi tilda gapirilayotganini tanlang. Keyin ▶ Boshlash tugmasini bosing.",
+    en: "Video found: <b>{title}</b>\n\nFirst, choose the language spoken in the video. Then tap ▶ Start.",
+    ru: "Найдено видео: <b>{title}</b>\n\nСначала выберите язык, на котором говорят в видео. Затем нажмите ▶ Начать.",
+  },
+  invalidMedia: {
+    ky: "Бул шилтемени колдойбойбуз. Азыр YouTube, TikTok жана Instagram Reels гана иштейт.",
+    tg: "Мо ин пайвандро дастгирӣ намекунем. Ҳоло танҳо YouTube, TikTok ва Instagram Reels кор мекунад.",
+    uz: "Biz bu havolani qo'llab-quvvatlamaymiz. Hozircha faqat YouTube, TikTok va Instagram Reels ishlaydi.",
+    en: "We don't support this link. Currently only YouTube, TikTok, and Instagram Reels work.",
+    ru: "Мы не поддерживаем эту ссылку. Сейчас работают только YouTube, TikTok и Instagram Reels.",
+  },
+  settingsMenu: {
+    ky: "Орнотуулар\n\nКайсы параметрди өзгөрткүңүз келет?",
+    tg: "Танзимот\n\nКадом параметрро тағйир медиҳед?",
+    uz: "Sozlamalar\n\nQaysi parametrni o'zgartirmoqchisiz?",
+    en: "Settings\n\nWhich parameter would you like to change?",
+    ru: "Настройки\n\nКакой параметр хотите изменить?",
+  },
+  sourceLanguageSet: {
+    ky: "Распознаоо тили сакталды: {lang}",
+    tg: "Забони транскрипция сабт шуд: {lang}",
+    uz: "Transkripsiya tili saqlandi: {lang}",
+    en: "Transcription language saved: {lang}",
+    ru: "Язык распознавания сохранён: {lang}",
+  },
+  targetLanguageSet: {
+    ky: "Которуу тили сакталды: {lang}",
+    tg: "Забони тарҷума сабт шуд: {lang}",
+    uz: "Tarjima tili saqlandi: {lang}",
+    en: "Translation language saved: {lang}",
+    ru: "Язык перевода сохранён: {lang}",
+  },
+  interfaceLanguageSet: {
+    ky: "Интерфейстин тили сакталды: {lang}",
+    tg: "Забони интерфейс сабт шуд: {lang}",
+    uz: "Interfeys tili saqlandi: {lang}",
+    en: "Interface language saved: {lang}",
+    ru: "Язык интерфейса сохранён: {lang}",
+  },
+  qualityWarning: {
+    ky: "Транскрипция текшерилгенде эскертүүлөр бар",
+    tg: "Дар транскрипция огоҳкуниҳо мавҷуданд",
+    uz: "Transkripsiyada ogohlantirishlar mavjud",
+    en: "Quality warnings detected in transcription",
+    ru: "В транскрипции обнаружены предупреждения",
+  },
+  unsupportedFileType: {
+    ky: "Бул файл түрү колдойбойт. Тек гана аудио же видео жибериңиз.",
+    tg: "Ин навъи файл дастгирӣ намешавад. Фақат аудио ё видео фиристед.",
+    uz: "Bu fayl turi qo'llab-quvvatlanmaydi. Faqat audio yoki video yuboring.",
+    en: "This file type is not supported. Please send only audio or video.",
+    ru: "Этот формат не поддерживается. Отправьте только аудио или видео.",
+  },
+  fileTooLarge: {
+    ky: "Файл өтө чоң ({size} МБ). Максимум 25 МБ колдойт. Кичирээк файл жибериңиз.",
+    tg: "Файл хеле калон аст ({size} МБ). Ҳадди аксар 25 МБ. Лутфан файли хурдтар фиристед.",
+    uz: "Fayl juda katta ({size} MB). Maksimum 25 MB. Iltimos, kichikroq fayl yuboring.",
+    en: "File is too large ({size} MB). Maximum is 25 MB. Please send a smaller file.",
+    ru: "Файл слишком большой ({size} МБ). Максимум 25 МБ. Отправьте файл меньше.",
+  },
+  back: {
+    ky: "Артка",
+    tg: "Бозгашт",
+    uz: "Orqaga",
+    en: "Back",
+    ru: "Назад",
+  },
+  backToMenu: {
+    ky: "Негизги менюга",
+    tg: "Ба менюи асосӣ",
+    uz: "Asosiy menyuga",
+    en: "Main menu",
+    ru: "Главное меню",
+  },
+  feedbackGood: {
+    ky: "👍 Жакты",
+    tg: "👍 Хуб",
+    uz: "👍 Yaxshi",
+    en: "👍 Good",
+    ru: "👍 Хорошо",
+  },
+  feedbackBad: {
+    ky: "👎 Жаман",
+    tg: "👎 Бад",
+    uz: "👎 Yomon",
+    en: "👎 Poor",
+    ru: "👎 Плохо",
+  },
+  feedbackReport: {
+    ky: "🛠 Көйгөй жөнүндө билдирүү",
+    tg: "🛠 Дар бораи мушкилӣ хабар диҳед",
+    uz: "🛠 Muammo haqida xabar berish",
+    en: "🛠 Report a problem",
+    ru: "🛠 Сообщить о проблеме",
+  },
+  feedbackReportHint: {
+    ky: "Кездешкен көйгөйдү кийинки билдирүүдө жазыңыз.",
+    tg: "Мушкилиеро, ки дучор шудед, дар паёми навбатӣ нависед.",
+    uz: "Duch kelgan muammoni keyingi xabarda yozing.",
+    en: "Describe the problem you ran into in your next message.",
+    ru: "Опишите проблему, с которой вы столкнулись, следующим сообщением.",
+  },
+  feedbackThanks: {
+    ky: "Пикириңиз үчүн рахмат!",
+    tg: "Ташаккур барои фикри шумо!",
+    uz: "Fikringiz uchun rahmat!",
+    en: "Thanks for the feedback!",
+    ru: "Спасибо за отзыв!",
+  },
+  feedbackAskReason: {
+    ky: "Эмне туура эмес болду?",
+    tg: "Чӣ нодуруст буд?",
+    uz: "Nima noto'g'ri edi?",
+    en: "What went wrong?",
+    ru: "Что было не так?",
+  },
+  feedbackReasonStt: {
+    ky: "Текст туура эмес",
+    tg: "Матн нодуруст",
+    uz: "Matn noto'g'ri",
+    en: "Bad transcription",
+    ru: "Плохое распознавание",
+  },
+  feedbackReasonTranslation: {
+    ky: "Котормо начар",
+    tg: "Тарҷума бад",
+    uz: "Tarjima yomon",
+    en: "Bad translation",
+    ru: "Плохой перевод",
+  },
+  feedbackReasonDownload: {
+    ky: "Видео жүктөлбөдү",
+    tg: "Видео боргирӣ нашуд",
+    uz: "Video yuklanmadi",
+    en: "Download problem",
+    ru: "Проблема со скачиванием",
+  },
+  feedbackReasonSpeed: {
+    ky: "Өтө жай",
+    tg: "Хеле суст",
+    uz: "Juda sekin",
+    en: "Too slow",
+    ru: "Слишком долго",
+  },
+  feedbackReasonOther: {
+    ky: "Башка",
+    tg: "Дигар",
+    uz: "Boshqa",
+    en: "Other",
+    ru: "Другое",
+  },
+  feedbackCommentHint: {
+    ky: "Рахмат! Кааласаңыз, кийинки билдирүүдө чечмелеп жазыңыз.",
+    tg: "Ташаккур! Агар хоҳед, дар паёми навбатӣ шарҳ диҳед.",
+    uz: "Rahmat! Xohlasangiz, keyingi xabarda batafsil yozing.",
+    en: "Thanks! If you like, describe it in your next message.",
+    ru: "Спасибо! Если хотите, опишите подробнее следующим сообщением.",
+  },
+  feedbackCommentSaved: {
+    ky: "Рахмат, жазып алдык!",
+    tg: "Ташаккур, сабт шуд!",
+    uz: "Rahmat, yozib oldik!",
+    en: "Thanks, noted!",
+    ru: "Спасибо, записали!",
+  },
+  start: {
+    ky: "Баштоо",
+    tg: "Оғоз кардан",
+    uz: "Boshlash",
+    en: "Start",
+    ru: "Начать",
+  },
+  changeLanguage: {
+    ky: "Тилди өзгөртүү",
+    tg: "Тағйири забон",
+    uz: "Tilni o'zgartirish",
+    en: "Change language",
+    ru: "Изменить язык",
+  },
+  settingsSourceLanguage: {
+    ky: "Жазуудагы тил",
+    tg: "Забони сабт",
+    uz: "Yozuvdagi til",
+    en: "Language in recording",
+    ru: "Язык в записи",
+  },
+  settingsTargetLanguage: {
+    ky: "Которуу тили",
+    tg: "Забони тарҷума",
+    uz: "Tarjima tili",
+    en: "Translation language",
+    ru: "Язык перевода",
+  },
+  helpButton: {
+    ky: "Жардам",
+    tg: "Кӯмак",
+    uz: "Yordam",
+    en: "Help",
+    ru: "Помощь",
+  },
+  settingsInterfaceLanguage: {
+    ky: "Интерфейс тили",
+    tg: "Забони интерфейс",
+    uz: "Interfeys tili",
+    en: "Interface language",
+    ru: "Язык интерфейса",
+  },
+  noDefaultTarget: {
+    ky: "Которуу жок",
+    tg: "Бе тарҷума",
+    uz: "Tarjimasiz",
+    en: "No translation",
+    ru: "Без перевода",
+  },
+  translateTextButton: {
+    ky: "Текст которуу",
+    tg: "Тарҷумаи матн",
+    uz: "Matn tarjima",
+    en: "Translate text",
+    ru: "Перевести текст",
+  },
+  sendTextToTranslate: {
+    ky: "Которула турган текстти жибериңиз:",
+    tg: "Матни тарҷумаашро фиристед:",
+    uz: "Tarjima qilinadigan matnni yuboring:",
+    en: "Send me the text to translate:",
+    ru: "Отправьте текст для перевода:",
+  },
+  chooseTranslationTargetLanguage: {
+    ky: "Текстти кайсы тилге которолосуңуз?",
+    tg: "Матнро ба кадом забон тарҷума кунам?",
+    uz: "Matnni qaysi tilga tarjima qilay?",
+    en: "What language should I translate the text into?",
+    ru: "На какой язык перевести текст?",
+  },
+};
+
+export function t(key: keyof typeof TRANSLATIONS, lang: SupportedLanguage, vars?: Record<string, string>): string {
+  // uz_cyrl falls back to uz for interface strings that have not been translated yet.
+  let text = TRANSLATIONS[key]?.[lang] ?? TRANSLATIONS[key]?.["uz"] ?? TRANSLATIONS[key]?.["en"] ?? key;
+  if (vars) {
+    for (const [k, v] of Object.entries(vars)) {
+      text = text.replace(new RegExp(`\\{${k}\\}`, "g"), v);
+    }
+  }
+  return text;
+}
+
+// ---------------------------------------------------------------------------
+// User preferences
+// ---------------------------------------------------------------------------
+export interface UserPreferences {
+  interfaceLanguage: SupportedLanguage;
+  sourceLanguage: SupportedLanguage;
+  targetLanguage: SupportedLanguage | "none";
+}
+
+function normalizeInterfaceLanguage(lang: string | null | undefined): SupportedLanguage {
+  if (lang && SUPPORTED_LANGUAGES.includes(lang as SupportedLanguage)) {
+    return lang as SupportedLanguage;
+  }
+  return "ru";
+}
+
+function normalizeSourceLanguage(lang: string | null | undefined): SupportedLanguage {
+  if (lang && SUPPORTED_LANGUAGES.includes(lang as SupportedLanguage)) return lang as SupportedLanguage;
+  return "ru";
+}
+
+function normalizeTargetLanguage(lang: string | null | undefined): SupportedLanguage | "none" {
+  if (lang === "none") return "none";
+  if (lang && SUPPORTED_LANGUAGES.includes(lang as SupportedLanguage)) return lang as SupportedLanguage;
+  return "none";
+}
+
+export function mapTelegramLanguageCode(code: string | undefined): SupportedLanguage {
+  if (!code) return "ru";
+  const map: Record<string, SupportedLanguage> = {
+    ky: "ky",
+    tg: "tg",
+    uz: "uz",
+    en: "en",
+    ru: "ru",
+    "ru-RU": "ru",
+    "en-US": "en",
+    "en-GB": "en",
+    "ky-KG": "ky",
+    "tg-TJ": "tg",
+    "uz-UZ": "uz",
+    "uz-Cyrl": "uz",
+  };
+  return map[code] ?? "ru";
+}
+
+export async function ensureUserProfile(
+  chatId: number,
+  telegramLanguageCode?: string
+): Promise<UserPreferences> {
+  const existing = await getUserByChatId(chatId);
+  if (existing) {
+    return {
+      interfaceLanguage: normalizeInterfaceLanguage(existing.interface_language),
+      sourceLanguage: normalizeSourceLanguage(existing.preferred_language),
+      targetLanguage: normalizeTargetLanguage(existing.target_language),
+    };
+  }
+  const detected = mapTelegramLanguageCode(telegramLanguageCode);
+  const target = detected === "ru" ? "en" : "ru";
+  await ensureUser(chatId, {
+    interface_language: detected,
+    preferred_language: detected,
+    target_language: target,
+  });
+  logger.info("New user profile created", { chatId, detectedLang: detected });
+  return {
+    interfaceLanguage: detected,
+    sourceLanguage: detected,
+    targetLanguage: target,
+  };
+}
+
+export async function getUserPreferences(chatId: number): Promise<UserPreferences> {
+  const user = await getUserByChatId(chatId);
+  return {
+    interfaceLanguage: normalizeInterfaceLanguage(user?.interface_language),
+    sourceLanguage: normalizeSourceLanguage(user?.preferred_language),
+    targetLanguage: normalizeTargetLanguage(user?.target_language),
+  };
+}
+
+export async function setUserInterfaceLanguage(chatId: number, lang: SupportedLanguage): Promise<void> {
+  await updateUserPreferences(chatId, { interface_language: lang });
+  logger.info("Interface language updated", { chatId, lang });
+}
+
+export async function setUserSourceLanguage(chatId: number, lang: SupportedLanguage): Promise<void> {
+  await updateUserPreferences(chatId, { preferred_language: lang });
+  logger.info("Source language updated", { chatId, lang });
+}
+
+export async function setUserTargetLanguage(chatId: number, lang: SupportedLanguage | "none"): Promise<void> {
+  await updateUserPreferences(chatId, { target_language: lang });
+  logger.info("Target language updated", { chatId, lang });
+}
+
+// Legacy helpers kept for compatibility
+export async function getUserLanguage(chatId: number): Promise<string | undefined> {
+  const prefs = await getUserPreferences(chatId);
+  return prefs.sourceLanguage;
+}
+
+export async function setUserLanguage(chatId: number, lang: string): Promise<void> {
+  await setUserSourceLanguage(chatId, lang as SupportedLanguage);
+}
+
+export async function getInterfaceLanguage(chatId: number): Promise<SupportedLanguage> {
+  const prefs = await getUserPreferences(chatId);
+  return prefs.interfaceLanguage;
+}
+
+export async function setInterfaceLanguage(chatId: number, lang: SupportedLanguage): Promise<void> {
+  await setUserInterfaceLanguage(chatId, lang);
+}
+
+// ---------------------------------------------------------------------------
+// Pending actions with TTL
+// ---------------------------------------------------------------------------
+export interface PendingMedia {
+  type: "media";
+  buffer: Buffer;
+  filename: string;
+  messageId: number;
+  dbMessageId: number;
+  sourceLanguage?: SupportedLanguage;
+  targetLanguage?: SupportedLanguage | "none";
+  createdAt: number;
+}
+
+export interface PendingYouTube {
+  type: "youtube";
+  url: string;
+  title?: string;
+  sourceLanguage?: SupportedLanguage;
+  targetLanguage?: SupportedLanguage | "none";
+  createdAt: number;
+}
+
+export interface PendingTranslateText {
+  type: "translate_text";
+  targetLanguage: SupportedLanguage;
+  createdAt: number;
+}
+
+export type PendingAction = PendingMedia | PendingYouTube | PendingTranslateText;
+type PendingActionWithId = (PendingMedia | PendingYouTube | PendingTranslateText) & { actionId: string };
+
+const pendingActions = new Map<number, PendingActionWithId>();
+const PENDING_TTL_MS = 60 * 60 * 1000; // 60 minutes
+
+function rowToPendingAction(row: PendingActionRow): PendingActionWithId {
+  const payload = row.payload;
+  if (row.action_type === "media") {
+    return {
+      type: "media",
+      actionId: row.action_id,
+      filename: String(payload.filename ?? "media.mp4"),
+      messageId: Number(payload.messageId ?? 0),
+      dbMessageId: Number(payload.dbMessageId ?? 0),
+      sourceLanguage: (payload.sourceLanguage as any) ?? "ru",
+      targetLanguage: (payload.targetLanguage as any) ?? "none",
+      buffer: row.buffer ?? Buffer.alloc(0),
+      createdAt: new Date(row.created_at).getTime(),
+    } as PendingActionWithId;
+  }
+  if (row.action_type === "translate_text") {
+    return {
+      type: "translate_text",
+      actionId: row.action_id,
+      targetLanguage: (payload.targetLanguage as any) ?? "ru",
+      createdAt: new Date(row.created_at).getTime(),
+    } as PendingActionWithId;
+  }
+  return {
+    type: "youtube",
+    actionId: row.action_id,
+    url: String(payload.url ?? ""),
+    title: payload.title ? String(payload.title) : undefined,
+    sourceLanguage: (payload.sourceLanguage as any) ?? "ru",
+    targetLanguage: (payload.targetLanguage as any) ?? "none",
+    createdAt: new Date(row.created_at).getTime(),
+  } as PendingActionWithId;
+}
+
+/** Load pending actions from DB on startup so they survive Render restarts/spin-downs. */
+export async function initPendingActions(): Promise<void> {
+  try {
+    const rows = await listPendingActions();
+    for (const row of rows) {
+      try {
+        pendingActions.set(Number(row.telegram_chat_id), rowToPendingAction(row));
+      } catch (err) {
+        logger.warn("Failed to hydrate pending action", { chatId: row.telegram_chat_id, error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+    logger.info("Hydrated pending actions from database", { count: pendingActions.size });
+  } catch (err) {
+    logger.warn("Failed to hydrate pending actions from database", { error: err instanceof Error ? err.message : String(err) });
+  }
+}
+
+function cleanExpiredPendingActions(): void {
+  const now = Date.now();
+  const expiredChatIds: number[] = [];
+  for (const [chatId, action] of pendingActions.entries()) {
+    if (now - action.createdAt > PENDING_TTL_MS) {
+      pendingActions.delete(chatId);
+      expiredChatIds.push(chatId);
+    }
+  }
+  if (expiredChatIds.length > 0) {
+    deleteExpiredPendingActions(PENDING_TTL_MS).catch((err) =>
+      logger.warn("Failed to clean expired pending actions from DB", { error: err instanceof Error ? err.message : String(err) })
+    );
+  }
+}
+
+function syncPendingActionToDb(chatId: number, action: PendingActionWithId): void {
+  const payload: Record<string, unknown> = { ...action };
+  delete payload.buffer;
+  delete payload.actionId;
+  const buffer = action.type === "media" ? action.buffer : undefined;
+  setPendingActionDb(chatId, action.actionId, action.type, payload, buffer).catch((err) =>
+    logger.warn("Failed to persist pending action", { chatId, error: err instanceof Error ? err.message : String(err) })
+  );
+}
+
+export function getPendingAction(chatId: number): PendingActionWithId | undefined {
+  cleanExpiredPendingActions();
+  return pendingActions.get(chatId);
+}
+
+export function setPendingAction(chatId: number, action: PendingAction): string {
+  cleanExpiredPendingActions();
+  const actionId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const withId = { ...action, actionId } as PendingActionWithId;
+  pendingActions.set(chatId, withId);
+  syncPendingActionToDb(chatId, withId);
+  return actionId;
+}
+
+export function updatePendingAction(chatId: number, updates: Partial<PendingAction>): void {
+  const existing = pendingActions.get(chatId);
+  if (existing) {
+    const updated = { ...existing, ...updates } as PendingActionWithId;
+    pendingActions.set(chatId, updated);
+    syncPendingActionToDb(chatId, updated);
+  }
+}
+
+export function clearPendingAction(chatId: number): void {
+  pendingActions.delete(chatId);
+  deletePendingActionDb(chatId).catch((err) =>
+    logger.warn("Failed to delete pending action from DB", { chatId, error: err instanceof Error ? err.message : String(err) })
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Active processes
+// ---------------------------------------------------------------------------
+export interface ActiveProcess {
+  pid?: number;
+  abortController?: AbortController;
+  startTime: number;
+  statusMessageId?: number;
+  type: "media" | "youtube" | "test";
+  language?: string;
+  filename?: string;
+  sourceUrl?: string;
+}
+
+const activeProcesses = new Map<number, ActiveProcess>();
+
+export function getActiveProcess(chatId: number): ActiveProcess | undefined {
+  return activeProcesses.get(chatId);
+}
+
+export function getActiveProcesses(): Map<number, ActiveProcess> {
+  return new Map(activeProcesses);
+}
+
+export function setActiveProcess(chatId: number, process: ActiveProcess): void {
+  activeProcesses.set(chatId, process);
+}
+
+export function clearActiveProcess(chatId: number): void {
+  activeProcesses.delete(chatId);
+}
+
+// ---------------------------------------------------------------------------
+// Telegram API helpers
+// ---------------------------------------------------------------------------
+export async function sendTextMessage(
+  chatId: number,
+  text: string,
+  options?: {
+    replyMarkup?: { inline_keyboard: InlineKeyboardButton[][] };
+    replyToMessageId?: number;
+  }
+): Promise<number> {
+  let firstMessageId = 0;
+  const chunks = splitMessage(text, MAX_MESSAGE_LENGTH);
+
+  for (let i = 0; i < chunks.length; i++) {
+    const body: Record<string, unknown> = {
+      chat_id: chatId,
+      text: chunks[i],
+      parse_mode: "HTML",
+    };
+
+    if (i === chunks.length - 1 && options?.replyMarkup) {
+      body.reply_markup = options.replyMarkup;
+    }
+
+    if (i === 0 && options?.replyToMessageId) {
+      body.reply_to_message_id = options.replyToMessageId;
+    }
+
+    const res = await fetch(`${TELEGRAM_API}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Telegram sendMessage failed: ${res.status} ${errText}`);
+    }
+
+    const data = (await res.json()) as { ok: boolean; result?: { message_id: number } };
+    if (i === 0 && data.result?.message_id) {
+      firstMessageId = data.result.message_id;
+    }
+
+    logger.debug("Sent message chunk to Telegram", { chatId, chunkIndex: i, totalChunks: chunks.length });
+  }
+
+  return firstMessageId;
+}
+
+function splitMessage(text: string, maxLength: number): string[] {
+  if (text.length <= maxLength) {
+    return [text];
+  }
+
+  const chunks: string[] = [];
+  let current = "";
+  const paragraphs = text.split("\n\n");
+
+  for (const para of paragraphs) {
+    if ((current + para + "\n\n").length <= maxLength) {
+      current += para + "\n\n";
+    } else {
+      if (current) {
+        chunks.push(current.trim());
+        current = "";
+      }
+      if (para.length > maxLength) {
+        const lines = para.split("\n");
+        for (const line of lines) {
+          if ((current + line + "\n").length <= maxLength) {
+            current += line + "\n";
+          } else {
+            if (current) {
+              chunks.push(current.trim());
+              current = "";
+            }
+            if (line.length > maxLength) {
+              const words = line.split(" ");
+              for (const word of words) {
+                if ((current + word + " ").length <= maxLength) {
+                  current += word + " ";
+                } else {
+                  if (current) {
+                    chunks.push(current.trim());
+                    current = "";
+                  }
+                  current = word + " ";
+                }
+              }
+            } else {
+              current = line + "\n";
+            }
+          }
+        }
+      } else {
+        current = para + "\n\n";
+      }
+    }
+  }
+
+  if (current) {
+    chunks.push(current.trim());
+  }
+
+  return chunks;
+}
+
+export async function sendDocument(
+  chatId: number,
+  documentBuffer: Buffer,
+  filename: string,
+  caption?: string,
+  replyMarkup?: { inline_keyboard: InlineKeyboardButton[][] }
+): Promise<number> {
+  const form = new FormData();
+  form.append("chat_id", String(chatId));
+  form.append("document", new Blob([new Uint8Array(documentBuffer)]), filename);
+  if (caption) {
+    form.append("caption", caption);
+  }
+  if (replyMarkup) {
+    form.append("reply_markup", JSON.stringify(replyMarkup));
+  }
+
+  const res = await fetch(`${TELEGRAM_API}/sendDocument`, {
+    method: "POST",
+    body: form as unknown as any,
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Telegram sendDocument failed: ${res.status} ${errText}`);
+  }
+
+  const data = (await res.json()) as { ok: boolean; result?: { message_id: number } };
+  logger.debug("Sent document to Telegram", { chatId, filename });
+  return data.result?.message_id ?? 0;
+}
+
+export async function editMessageText(
+  chatId: number,
+  messageId: number,
+  text: string,
+  options?: { replyMarkup?: { inline_keyboard: InlineKeyboardButton[][] } }
+): Promise<void> {
+  const body: Record<string, unknown> = {
+    chat_id: chatId,
+    message_id: messageId,
+    text,
+    parse_mode: "HTML",
+  };
+  if (options?.replyMarkup) {
+    body.reply_markup = options.replyMarkup;
+  }
+
+  const res = await fetch(`${TELEGRAM_API}/editMessageText`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    if (res.status === 400 && errText.includes("message is not modified")) {
+      return;
+    }
+    throw new Error(`Telegram editMessageText failed: ${res.status} ${errText}`);
+  }
+}
+
+export async function deleteMessage(chatId: number, messageId: number): Promise<void> {
+  const res = await fetch(`${TELEGRAM_API}/deleteMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id: chatId, message_id: messageId }),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    if (res.status === 400 && errText.includes("message can't be deleted")) {
+      return;
+    }
+    throw new Error(`Telegram deleteMessage failed: ${res.status} ${errText}`);
+  }
+}
+
+export async function answerCallbackQuery(
+  callbackQueryId: string,
+  text?: string,
+  showAlert = false
+): Promise<void> {
+  const body: Record<string, unknown> = {
+    callback_query_id: callbackQueryId,
+  };
+
+  if (text) {
+    body.text = text;
+    body.show_alert = showAlert;
+  }
+
+  const res = await fetch(`${TELEGRAM_API}/answerCallbackQuery`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Telegram answerCallbackQuery failed: ${res.status} ${errText}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Keyboards
+// ---------------------------------------------------------------------------
+export function createMainKeyboard(lang: SupportedLanguage): { inline_keyboard: InlineKeyboardButton[][] } {
+  return {
+    inline_keyboard: [
+      [{ text: t("translateTextButton", lang), callback_data: "action:translate_text" }],
+      [
+        { text: t("settingsMenu", lang).split("\n")[0], callback_data: "action:settings" },
+        { text: t("helpButton", lang), callback_data: "action:help" },
+      ],
+    ],
+  };
+}
+
+export function createSettingsMenuKeyboard(lang: SupportedLanguage): { inline_keyboard: InlineKeyboardButton[][] } {
+  return {
+    inline_keyboard: [
+      [{ text: t("settingsInterfaceLanguage", lang), callback_data: "action:settings:interface" }],
+      [{ text: t("settingsSourceLanguage", lang), callback_data: "action:settings:source" }],
+      [{ text: t("settingsTargetLanguage", lang), callback_data: "action:settings:target" }],
+      [{ text: `← ${t("back", lang)}`, callback_data: "action:main" }],
+    ],
+  };
+}
+
+export function createInterfaceLanguageKeyboard(
+  lang: SupportedLanguage,
+  backAction = "action:settings"
+): { inline_keyboard: InlineKeyboardButton[][] } {
+  const buttons = INTERFACE_LANGUAGES.map((lang) => ({
+    text: `${LANGUAGE_FLAGS[lang]} ${LANGUAGE_LABELS[lang]}`,
+    callback_data: `ui_lang:${lang}`,
+  }));
+  return {
+    inline_keyboard: [buttons.slice(0, 3), buttons.slice(3, 5), [{ text: `← ${t("back", lang)}`, callback_data: backAction }]],
+  };
+}
+
+export function createSourceLanguageKeyboard(
+  action: "default" | `confirm:${string}`,
+  lang: SupportedLanguage,
+  backAction = "action:settings"
+): { inline_keyboard: InlineKeyboardButton[][] } {
+  const buttons = SOURCE_LANGUAGES.map((lang) => ({
+    text: `${LANGUAGE_FLAGS[lang]} ${LANGUAGE_LABELS[lang]}`,
+    callback_data: `source:${lang}:${action}`,
+  }));
+  return {
+    inline_keyboard: [buttons.slice(0, 3), buttons.slice(3, 5), [{ text: `← ${t("back", lang)}`, callback_data: backAction }]],
+  };
+}
+
+export function createTargetLanguageKeyboard(
+  action: "default" | `confirm:${string}` | `translate_text:${string}`,
+  lang: SupportedLanguage,
+  backAction = "action:settings"
+): { inline_keyboard: InlineKeyboardButton[][] } {
+  const buttons = SUPPORTED_LANGUAGES.map((lang) => ({
+    text: `${LANGUAGE_FLAGS[lang]} ${LANGUAGE_LABELS[lang]}`,
+    callback_data: `target:${lang}:${action}`,
+  }));
+  return {
+    inline_keyboard: [
+      buttons.slice(0, 3),
+      buttons.slice(3, 6),
+      [{ text: t("noTranslation", lang), callback_data: `target:none:${action}` }],
+      [{ text: `← ${t("back", lang)}`, callback_data: backAction }],
+    ],
+  };
+}
+
+export function createConfirmationKeyboard(
+  actionId: string,
+  lang: SupportedLanguage,
+  targetLanguage: SupportedLanguage | "none" = "none"
+): { inline_keyboard: InlineKeyboardButton[][] } {
+  const targetLabel =
+    targetLanguage === "none"
+      ? t("noDefaultTarget", lang)
+      : `${LANGUAGE_FLAGS[targetLanguage]} ${LANGUAGE_LABELS[targetLanguage]}`;
+
+  return {
+    inline_keyboard: [
+      [{ text: `▶ ${t("start", lang)}`, callback_data: `confirm:start:${actionId}` }],
+      [
+        { text: t("settingsSourceLanguage", lang), callback_data: `confirm:lang:${actionId}` },
+        { text: targetLabel, callback_data: `confirm:target:${actionId}` },
+      ],
+      [{ text: `← ${t("back", lang)}`, callback_data: `confirm:cancel:${actionId}` }],
+    ],
+  };
+}
+
+export function createTestLanguageKeyboard(): { inline_keyboard: InlineKeyboardButton[][] } {
+  const buttons = SUPPORTED_LANGUAGES.map((lang) => ({
+    text: `${LANGUAGE_FLAGS[lang]} ${LANGUAGE_LABELS[lang]}`,
+    callback_data: `test_lang:${lang}`,
+  }));
+  return {
+    inline_keyboard: [
+      buttons.slice(0, 3),
+      buttons.slice(3, 5),
+      [{ text: "All languages", callback_data: "test_lang:all" }],
+    ],
+  };
+}
+
+export function createStopKeyboard(_lang: SupportedLanguage, processId: string): { inline_keyboard: InlineKeyboardButton[][] } {
+  return {
+    inline_keyboard: [[{ text: "Stop", callback_data: `stop:${processId}` }]],
+  };
+}
+
+export function createQuickActionsKeyboard(lang: SupportedLanguage): { inline_keyboard: InlineKeyboardButton[][] } {
+  return {
+    inline_keyboard: [[{ text: `← ${t("back", lang)}`, callback_data: "action:main" }]],
+  };
+}
+
+export function createBackToMenuKeyboard(lang: SupportedLanguage): { inline_keyboard: InlineKeyboardButton[][] } {
+  return {
+    inline_keyboard: [[{ text: `← ${t("backToMenu", lang)}`, callback_data: "action:main" }]],
+  };
+}
+
+/**
+ * Keyboard attached to a finished result: one-tap rating plus the menu button.
+ * Rating is deliberately a single tap with no follow-up message, so asking for
+ * feedback costs the user nothing.
+ */
+export function createResultKeyboard(
+  lang: SupportedLanguage,
+  requestNumber?: number
+): { inline_keyboard: InlineKeyboardButton[][] } {
+  const ref = requestNumber ?? 0;
+  return {
+    inline_keyboard: [
+      [
+        { text: t("feedbackGood", lang), callback_data: `fb:up:${ref}` },
+        { text: t("feedbackBad", lang), callback_data: `fb:down:${ref}` },
+      ],
+      // Own row: a problem report is not a rating and asks for typing, so it
+      // should not look like a third thumb.
+      [{ text: t("feedbackReport", lang), callback_data: `fb:issue:${ref}` }],
+      [{ text: `← ${t("backToMenu", lang)}`, callback_data: "action:main" }],
+    ],
+  };
+}
+
+/** Quick reason buttons shown after a negative rating. */
+export function createFeedbackReasonKeyboard(
+  lang: SupportedLanguage,
+  feedbackId: number
+): { inline_keyboard: InlineKeyboardButton[][] } {
+  return {
+    inline_keyboard: [
+      [
+        { text: t("feedbackReasonStt", lang), callback_data: `fbc:stt:${feedbackId}` },
+        { text: t("feedbackReasonTranslation", lang), callback_data: `fbc:translation:${feedbackId}` },
+      ],
+      [
+        { text: t("feedbackReasonDownload", lang), callback_data: `fbc:download:${feedbackId}` },
+        { text: t("feedbackReasonSpeed", lang), callback_data: `fbc:speed:${feedbackId}` },
+      ],
+      [{ text: t("feedbackReasonOther", lang), callback_data: `fbc:other:${feedbackId}` }],
+      [{ text: `← ${t("backToMenu", lang)}`, callback_data: "action:main" }],
+    ],
+  };
+}
+
+/**
+ * Replace only the inline keyboard of an existing message. Unlike
+ * editMessageText this also works on documents (the result file), which have no
+ * editable text.
+ */
+export async function editMessageReplyMarkup(
+  chatId: number,
+  messageId: number,
+  replyMarkup: { inline_keyboard: InlineKeyboardButton[][] }
+): Promise<void> {
+  const res = await fetch(`${TELEGRAM_API}/editMessageReplyMarkup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id: chatId, message_id: messageId, reply_markup: replyMarkup }),
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Telegram editMessageReplyMarkup failed: ${res.status} ${errText}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// HTML sanitization
+// ---------------------------------------------------------------------------
+export function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}

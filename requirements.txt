@@ -1,0 +1,5 @@
+# Python dependencies used by the Node.js backend for YouTube handling.
+# Install on the host (not inside the STT Docker container):
+#   pip3 install -r requirements.txt
+
+requests>=2.32.0

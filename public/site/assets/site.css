@@ -1,0 +1,68 @@
+/* Shared styling for the TilTap site. Kept small on purpose — Tailwind and
+   daisyUI do the heavy lifting; this file only holds what utility classes
+   cannot express cleanly. */
+
+.hero-gradient {
+  background:
+    radial-gradient(60rem 30rem at 15% -10%, color-mix(in oklab, var(--color-primary) 22%, transparent), transparent 60%),
+    radial-gradient(50rem 28rem at 95% 0%, color-mix(in oklab, var(--color-secondary) 18%, transparent), transparent 55%);
+}
+
+.section {
+  scroll-margin-top: 5rem;
+}
+
+.dropzone {
+  border: 2px dashed color-mix(in oklab, var(--color-base-content) 20%, transparent);
+  background: color-mix(in oklab, var(--color-base-content) 3%, transparent);
+  border-radius: var(--radius-box);
+  padding: 2.75rem 1rem;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.dropzone:hover,
+.dropzone.dragover {
+  border-color: var(--color-primary);
+  background: color-mix(in oklab, var(--color-primary) 7%, transparent);
+}
+
+.dropzone input {
+  display: none;
+}
+
+.text-box {
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.7;
+  max-height: 26rem;
+  overflow: auto;
+}
+
+.segment-row {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr;
+  gap: 0.75rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid color-mix(in oklab, var(--color-base-content) 8%, transparent);
+}
+
+.segment-row time {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.75rem;
+  opacity: 0.6;
+  padding-top: 0.15rem;
+}
+
+@media (max-width: 480px) {
+  .segment-row {
+    grid-template-columns: 1fr;
+    gap: 0.15rem;
+  }
+}
+
+/* Wide content must scroll inside its own box, never the page. */
+.table-scroll {
+  overflow-x: auto;
+}

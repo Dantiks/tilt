@@ -1,0 +1,111 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+public/web/build-info.json
+
+# Environment
+.env
+.env.local
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Playwright
+.playwright-mcp/
+
+# Local runtime data / caches
+.pglite-data/
+.pglite-data.bak.*/
+.pglite-data*/
+test_audio/cache/
+
+# ML models and binaries
+models/
+vosk-model-*/
+cloudflared.exe
+*.exe
+.pglite-test/
+
+# Runtime state
+*.pid
+poller_offset.txt
+
+# Python caches
+__pycache__/
+*.pyc
+.pytest_cache/
+.torch_cache/
+
+# STT service local secrets / env
+stt-service/.keys/
+stt-service/.venv/
+stt-service/__pycache__/
+
+# Temporary files
+tmp/
+tmp_*.wav
+tmp_*.json
+tmp_*.txt
+
+# YouTube cookies (sensitive session data)
+cookies.txt
+*.cookies.txt
+*.bak
+
+# Screenshots / local assets
+*.png
+
+# Deployment keys
+.keys/
+
+# Large downloaded test fixtures
+test_audio/youtube/
+test_audio/cache/
+
+# Local ML experiments / downloads
+hf_downloads/
+deploy-venv/
+tmp_ky_hf/
+*.tar.gz
+ky_test.*
+*_stt*.json
+*_stt*.txt
+*_translation*.json
+*_translation*.txt
+*_decoded.txt
+ky_vosk_sample.txt
+ky_test_output.txt
+ky_test_variants.txt
+ru_test*.mp3
+kimi-export-*.md
+hetzner_links.json
+hetzner_server_buttons.json
+kyrgyz_stt.json
+documents/
+.tools/
+tmp_*
+test_audio/ky_yt_*.wav
+
+# Infra map with prod details - local only, never push (public repo)
+DEPLOY.md
+
+# Local-only operational docs: contain end-user Telegram chat IDs and server
+# access procedure. This repo is public - these must not be pushed.
+docs/AI_SSH_ACCESS_SETUP.md
+docs/AI_ERROR_REPORT_*.md
+
+# Claude Code local dev config
+.claude/
