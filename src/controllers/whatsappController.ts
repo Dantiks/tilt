@@ -8,6 +8,7 @@ import type {
   WhatsAppMessage,
   WhatsAppMedia,
   WhatsAppListRow,
+  WhatsAppMessageType,
 } from "../types/whatsapp";
 import type { TranscriptionResult, TranscriptionSegment } from "../types";
 import { transcribeAudio, formatSubtitles } from "../services/transcriptionService";
@@ -1237,3 +1238,128 @@ async function notifyAdminFeedback(entry: FeedbackEntry, isFollowUp = false): Pr
 
 // Segments are only used for the subtitle file; exported for tests.
 export type { TranscriptionSegment };
+
+// ---------------------------------------------------------------------------
+// Alternative Providers Webhooks
+// ---------------------------------------------------------------------------
+
+export async function handleTwilioWebhook(req: Request, res: Response): Promise<void> {
+  // Twilio sends a POST with form-urlencoded body
+  const body = req.body;
+  if (!body || !body.From) {
+    res.sendStatus(200);
+    return;
+  }
+
+  const fromNumber = body.From.replace("whatsapp:", "");
+  const messageId = body.MessageSid;
+  const profileName = body.ProfileName;
+  const numMedia = parseInt(body.NumMedia || "0", 10);
+  
+  let msgType: WhatsAppMessageType = "text";
+  if (numMedia > 0) {
+    const contentType = body.MediaContentType0 || "";
+    if (contentType.startsWith("audio/")) msgType = "audio";
+    else if (contentType.startsWith("video/")) msgType = "video";
+    else msgType = "document";
+  }
+
+  const msg: WhatsAppMessage = {
+    id: messageId,
+    from: fromNumber,
+    timestamp: String(Date.now()), // Not provided in same format by Twilio
+    type: msgType,
+  };
+
+  if (numMedia > 0) {
+    const media: WhatsAppMedia = {
+      id: body.MediaUrl0, // For Twilio, we use the URL directly as media ID
+      mime_type: body.MediaContentType0,
+    };
+    if (msgType === "audio") msg.audio = media;
+    else if (msgType === "video") msg.video = media;
+    else msg.document = media;
+  } else {
+    msg.text = { body: body.Body || "" };
+  }
+
+  // Acknowledge webhook before processing
+  res.sendStatus(200);
+  
+  if (!isWhatsAppEnabled()) return;
+
+  try {
+    await handleMessage(msg, profileName);
+  } catch (err) {
+    logger.error("Error processing Twilio WhatsApp message", {
+      error: err instanceof Error ? err.message : String(err),
+      messageId: msg.id,
+    });
+  }
+}
+
+export async function handleGreenApiWebhook(req: Request, res: Response): Promise<void> {
+  res.sendStatus(200); // Acknowledge webhook immediately
+
+  if (!isWhatsAppEnabled()) return;
+
+  const body = req.body;
+  if (body?.typeWebhook !== "incomingMessageReceived") return;
+
+  const idMessage = body.idMessage;
+  const chatId = body.senderData?.chatId;
+  const fromNumber = chatId ? chatId.split("@")[0] : "";
+  const profileName = body.senderData?.senderName;
+
+  const msgData = body.messageData;
+  if (!msgData) return;
+
+  const typeMessage = msgData.typeMessage;
+
+  let msgType: WhatsAppMessageType = "unsupported";
+  let textBody = "";
+  let media: WhatsAppMedia | undefined = undefined;
+
+  if (typeMessage === "textMessage") {
+    msgType = "text";
+    textBody = msgData.textMessageData?.textMessage || "";
+  } else if (typeMessage === "extendedTextMessage") {
+    msgType = "text";
+    textBody = msgData.extendedTextMessageData?.text || "";
+  } else if (typeMessage === "audioMessage" || typeMessage === "videoMessage" || typeMessage === "documentMessage") {
+    if (typeMessage === "audioMessage") msgType = "audio";
+    else if (typeMessage === "videoMessage") msgType = "video";
+    else msgType = "document";
+
+    media = {
+      id: msgData.fileMessageData?.downloadUrl, // using downloadUrl as ID
+      mime_type: msgData.fileMessageData?.mimeType,
+      filename: msgData.fileMessageData?.fileName,
+    };
+  } else if (typeMessage === "quotedMessage") {
+    // Basic fallback for quoted texts
+    msgType = "text";
+    textBody = msgData.quotedMessage?.textMessage || "";
+  }
+
+  const msg: WhatsAppMessage = {
+    id: idMessage,
+    from: fromNumber,
+    timestamp: String(Date.now()),
+    type: msgType,
+  };
+
+  if (msgType === "text") msg.text = { body: textBody };
+  else if (msgType === "audio") msg.audio = media;
+  else if (msgType === "video") msg.video = media;
+  else if (msgType === "document") msg.document = media;
+
+  try {
+    await handleMessage(msg, profileName);
+  } catch (err) {
+    logger.error("Error processing Green-API WhatsApp message", {
+      error: err instanceof Error ? err.message : String(err),
+      messageId: msg.id,
+    });
+  }
+}

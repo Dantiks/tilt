@@ -22,6 +22,8 @@ import {
   t,
   type SupportedLanguage,
 } from "./telegramService";
+import { whatsappProvider } from "./whatsapp";
+export type { DownloadedMedia } from "./whatsapp";
 
 // The interface dictionary, language constants and `t()` are shared with the
 // Telegram bot on purpose: the two bots are the same product and must not drift
@@ -50,11 +52,7 @@ const MAX_BUTTONS = 3;
 const MAX_LIST_ROWS = 10;
 
 export function isWhatsAppEnabled(): boolean {
-  return Boolean(config.WHATSAPP_ACCESS_TOKEN && config.WHATSAPP_PHONE_NUMBER_ID);
-}
-
-function graphUrl(path: string): string {
-  return `${config.WHATSAPP_GRAPH_URL}/${config.WHATSAPP_API_VERSION}/${path}`;
+  return whatsappProvider.isConfigured();
 }
 
 // ---------------------------------------------------------------------------
@@ -199,88 +197,22 @@ function splitMessage(text: string, maxLength = WA_MAX_MESSAGE_LENGTH): string[]
 }
 
 // ---------------------------------------------------------------------------
-// Graph API transport
+// Provider Delegation
 // ---------------------------------------------------------------------------
 
-interface SendResponse {
-  messages?: { id: string }[];
-  error?: { message?: string; type?: string; code?: number; error_data?: { details?: string } };
-}
-
-async function callGraph(body: Record<string, unknown>): Promise<string | undefined> {
-  if (!isWhatsAppEnabled()) {
-    logger.warn("WhatsApp send skipped: bot is not configured");
-    return undefined;
-  }
-
-  const res = await fetch(graphUrl(`${config.WHATSAPP_PHONE_NUMBER_ID}/messages`), {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${config.WHATSAPP_ACCESS_TOKEN}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ messaging_product: "whatsapp", ...body }),
-  });
-
-  const data = (await res.json().catch(() => ({}))) as SendResponse;
-  if (!res.ok || data.error) {
-    const detail = data.error?.error_data?.details ?? data.error?.message ?? `HTTP ${res.status}`;
-    logger.error("WhatsApp send failed", { status: res.status, detail, type: body.type });
-    throw new Error(`WhatsApp API error: ${detail}`);
-  }
-  return data.messages?.[0]?.id;
-}
-
-/**
- * Send plain text. Long bodies are split rather than rejected, and the id of the
- * last chunk is returned so a caller can react to it.
- */
 export async function sendText(waId: string, text: string, previewUrl = false): Promise<string | undefined> {
-  let lastId: string | undefined;
-  for (const chunk of splitMessage(text)) {
-    lastId = await callGraph({
-      to: waId,
-      type: "text",
-      text: { preview_url: previewUrl, body: chunk },
-    });
-  }
-  return lastId;
+  return whatsappProvider.sendText(waId, text, previewUrl);
 }
 
-/**
- * Send up to three reply buttons. WhatsApp allows no more than three, so
- * callers that need more options must use a list instead — passing extra
- * buttons here would make the whole message fail, so they are dropped with a
- * warning rather than silently sent.
- */
 export async function sendButtons(
   waId: string,
   body: string,
   buttons: WhatsAppButton[],
   options: { header?: string; footer?: string } = {}
 ): Promise<string | undefined> {
-  if (buttons.length > MAX_BUTTONS) {
-    logger.warn("Too many WhatsApp buttons, extra ones dropped", { count: buttons.length });
-  }
-  const trimmed = buttons.slice(0, MAX_BUTTONS).map((b) => ({
-    type: "reply",
-    reply: { id: b.id.slice(0, 256), title: truncate(b.title, BUTTON_TITLE_MAX) },
-  }));
-
-  return callGraph({
-    to: waId,
-    type: "interactive",
-    interactive: {
-      type: "button",
-      ...(options.header ? { header: { type: "text", text: truncate(options.header, 60) } } : {}),
-      body: { text: truncate(body, 1024) },
-      ...(options.footer ? { footer: { text: truncate(options.footer, 60) } } : {}),
-      action: { buttons: trimmed },
-    },
-  });
+  return whatsappProvider.sendButtons(waId, body, buttons, options);
 }
 
-/** Send a tappable list — the only way to offer more than three choices. */
 export async function sendList(
   waId: string,
   body: string,
@@ -288,118 +220,24 @@ export async function sendList(
   rows: WhatsAppListRow[],
   options: { header?: string; footer?: string; sectionTitle?: string } = {}
 ): Promise<string | undefined> {
-  if (rows.length > MAX_LIST_ROWS) {
-    logger.warn("Too many WhatsApp list rows, extra ones dropped", { count: rows.length });
-  }
-  const trimmed = rows.slice(0, MAX_LIST_ROWS).map((row) => ({
-    id: row.id.slice(0, 200),
-    title: truncate(row.title, LIST_ROW_TITLE_MAX),
-    ...(row.description ? { description: truncate(row.description, LIST_ROW_DESCRIPTION_MAX) } : {}),
-  }));
-
-  return callGraph({
-    to: waId,
-    type: "interactive",
-    interactive: {
-      type: "list",
-      ...(options.header ? { header: { type: "text", text: truncate(options.header, 60) } } : {}),
-      body: { text: truncate(body, 1024) },
-      ...(options.footer ? { footer: { text: truncate(options.footer, 60) } } : {}),
-      action: {
-        button: truncate(buttonLabel, LIST_BUTTON_LABEL_MAX),
-        sections: [{ title: truncate(options.sectionTitle ?? "TilTap", 24), rows: trimmed }],
-      },
-    },
-  });
+  return whatsappProvider.sendList(waId, body, buttonLabel, rows, options);
 }
 
-/** Upload bytes to the Graph API media store and return the media id. */
-export async function uploadMedia(buffer: Buffer, filename: string, mimeType: string): Promise<string> {
-  const form = new FormData();
-  form.append("messaging_product", "whatsapp");
-  form.append("type", mimeType);
-  form.append("file", new Blob([new Uint8Array(buffer)], { type: mimeType }), filename);
-
-  const res = await fetch(graphUrl(`${config.WHATSAPP_PHONE_NUMBER_ID}/media`), {
-    method: "POST",
-    headers: { Authorization: `Bearer ${config.WHATSAPP_ACCESS_TOKEN}` },
-    body: form,
-  });
-
-  const data = (await res.json().catch(() => ({}))) as { id?: string; error?: { message?: string } };
-  if (!res.ok || !data.id) {
-    throw new Error(`WhatsApp media upload failed: ${data.error?.message ?? `HTTP ${res.status}`}`);
-  }
-  return data.id;
-}
-
-/** Upload a generated .txt and send it as a document. */
 export async function sendDocument(
   waId: string,
   buffer: Buffer,
   filename: string,
   caption?: string
 ): Promise<string | undefined> {
-  const mediaId = await uploadMedia(buffer, filename, "text/plain");
-  return callGraph({
-    to: waId,
-    type: "document",
-    document: {
-      id: mediaId,
-      filename,
-      ...(caption ? { caption: truncate(caption, 1024) } : {}),
-    },
-  });
+  return whatsappProvider.sendDocument(waId, buffer, filename, caption);
 }
 
-export interface DownloadedMedia {
-  buffer: Buffer;
-  mimeType: string;
-  fileSize: number;
+export async function downloadMedia(mediaIdOrUrl: string) {
+  return whatsappProvider.downloadMedia(mediaIdOrUrl);
 }
 
-/**
- * Two-step media download: resolve the media id to a short-lived CDN URL, then
- * fetch it. The CDN link also requires the bearer token — a plain GET returns
- * 401.
- */
-export async function downloadMedia(mediaId: string): Promise<DownloadedMedia> {
-  const metaRes = await fetch(graphUrl(mediaId), {
-    headers: { Authorization: `Bearer ${config.WHATSAPP_ACCESS_TOKEN}` },
-  });
-  const meta = (await metaRes.json().catch(() => ({}))) as {
-    url?: string;
-    mime_type?: string;
-    file_size?: number;
-    error?: { message?: string };
-  };
-  if (!metaRes.ok || !meta.url) {
-    throw new Error(`WhatsApp media lookup failed: ${meta.error?.message ?? `HTTP ${metaRes.status}`}`);
-  }
-
-  const fileRes = await fetch(meta.url, {
-    headers: { Authorization: `Bearer ${config.WHATSAPP_ACCESS_TOKEN}` },
-  });
-  if (!fileRes.ok) {
-    throw new Error(`WhatsApp media download failed: HTTP ${fileRes.status}`);
-  }
-
-  const buffer = Buffer.from(await fileRes.arrayBuffer());
-  logger.info("Downloaded media from WhatsApp", { mediaId, sizeBytes: buffer.length });
-  return {
-    buffer,
-    mimeType: meta.mime_type ?? "application/octet-stream",
-    fileSize: meta.file_size ?? buffer.length,
-  };
-}
-
-/** Blue ticks. Best-effort: a failure here must never abort the actual reply. */
 export async function markAsRead(messageId: string): Promise<void> {
-  try {
-    await callGraph({ status: "read", message_id: messageId });
-  } catch (err) {
-    logger.debug("markAsRead failed", { error: err instanceof Error ? err.message : String(err) });
-  }
+  return whatsappProvider.markAsRead(messageId);
 }
 
 // ---------------------------------------------------------------------------

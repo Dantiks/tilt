@@ -25,6 +25,16 @@ const envSchema = z.object({
   WHATSAPP_API_VERSION: z.string().optional().or(z.literal("")).default("v21.0"),
   WHATSAPP_GRAPH_URL: z.string().url().optional().or(z.literal("")).default("https://graph.facebook.com"),
 
+  // ---- WhatsApp Multi-Provider --------------------------------------------
+  WHATSAPP_PROVIDER: z.enum(["meta", "twilio", "greenapi"]).default("meta"),
+  // Twilio
+  TWILIO_ACCOUNT_SID: z.string().optional().or(z.literal("")),
+  TWILIO_AUTH_TOKEN: z.string().optional().or(z.literal("")),
+  TWILIO_WHATSAPP_NUMBER: z.string().optional().or(z.literal("")),
+  // Green-API
+  GREEN_API_ID_INSTANCE: z.string().optional().or(z.literal("")),
+  GREEN_API_API_TOKEN_INSTANCE: z.string().optional().or(z.literal("")),
+
   // ---- Public website -----------------------------------------------------
   // Used to build the "chat with the bot" links. A channel whose handle is
   // missing is simply not advertised on the site.
