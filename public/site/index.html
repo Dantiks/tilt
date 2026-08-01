@@ -341,9 +341,10 @@
 
     initLanguageSwitcher();
 
-    // Only advertise a channel this deployment actually has configured.
+    // Show a channel's button as soon as it has a handle to link to; whether the
+    // bot itself is wired up is a separate concern from advertising the link.
     loadSiteConfig().then((cfg) => {
-      if (cfg.channels?.telegram && cfg.links?.telegram) {
+      if (cfg.links?.telegram) {
         for (const id of ["heroTelegram", "botTelegramLink", "footerTelegram"]) {
           const el = document.getElementById(id);
           el.href = cfg.links.telegram;
@@ -351,7 +352,7 @@
         }
         document.getElementById("botTelegramSoon").classList.add("hidden");
       }
-      if (cfg.channels?.whatsapp && cfg.links?.whatsapp) {
+      if (cfg.links?.whatsapp) {
         for (const id of ["heroWhatsApp", "botWhatsAppLink", "footerWhatsApp"]) {
           const el = document.getElementById(id);
           el.href = cfg.links.whatsapp;
