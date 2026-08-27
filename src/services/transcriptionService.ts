@@ -13,6 +13,7 @@ import { normalizeLanguageCodeOrKeep } from "../utils/languageCodes";
 import { transcribeWithRemoteService } from "./remoteSttService";
 import { isGpuSttEnabled, isGpuSttLanguageSupported, transcribeWithGpu } from "./gpuSttService";
 import { isGigaamServerEnabled, isGigaamServerLanguage, transcribeWithGigaamServer } from "./gigaamServerService";
+import { isModuleSttEnabled, transcribeWithModule } from "./moduleSttService";
 
 const FFMPEG_PATH = require("ffmpeg-static");
 const PYTHON_PATH = process.platform === "win32" ? "python" : "python3";
@@ -32,6 +33,26 @@ export async function transcribeAudio(
 ): Promise<TranscriptionResult> {
   const provider = config.TILTAB_STT_PROVIDER;
   const normalizedLang = language ? normalizeLanguageCodeOrKeep(language) : undefined;
+
+  // The transcription module is the intended production path once configured:
+  // it holds the models and does its own post-processing. It is asynchronous and
+  // its queue is shared service-wide, so a job may wait; on any failure fall
+  // through to the chain below rather than failing the user's request.
+  if (isModuleSttEnabled()) {
+    try {
+      const result = await transcribeWithModule(audioBuffer, filename, normalizedLang ?? "auto", {
+        onProgress: (percent) => onProgress?.({ percent, label: "Расшифровка" }),
+        abortSignal,
+      });
+      return normalizeTranscriptionResult(result);
+    } catch (err) {
+      logger.warn("Transcription module failed, falling back", {
+        error: err instanceof Error ? err.message : String(err),
+        language: normalizedLang,
+        filename,
+      });
+    }
+  }
 
   // GPU offloading for supported languages (ru/en/uz/tg/ky/auto/multi). GPU is
   // cheaper and faster than CPU inference on the Hetzner box for heavy files.

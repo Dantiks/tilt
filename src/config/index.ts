@@ -61,6 +61,14 @@ const envSchema = z.object({
   // it is not reloaded on every request. When set, GigaAM languages are sent
   // here; on any failure the backend falls back to spawning transcribe_hybrid.py.
   TILTAB_GIGAAM_SERVER_URL: z.string().url().optional().or(z.literal("")),
+
+  // Daniel's transcription module. Asynchronous: POST returns 202 with a job id,
+  // the result is polled from /api/web/jobs/{id}. Recognition is serialised on
+  // one machine there, so the ceiling has to cover a long job waiting its turn.
+  TILTAB_MODULE_URL: z.string().url().optional().or(z.literal("")),
+  TILTAB_MODULE_API_KEY: z.string().optional().or(z.literal("")),
+  TILTAB_MODULE_POLL_MS: z.string().default("5000").transform(Number),
+  TILTAB_MODULE_TIMEOUT_MS: z.string().default("1800000").transform(Number),
   TILTAB_GIGAAM_SERVER_TIMEOUT_MS: z.string().default("600000").transform(Number),
   TILTAB_GIGAAM_SERVER_LANGUAGES: z
     .string()

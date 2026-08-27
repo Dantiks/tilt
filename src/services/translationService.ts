@@ -826,7 +826,14 @@ async function doTranslate(translateReq: TranslateRequest): Promise<TranslateRes
     try {
       const res = await fetch(config.TRANSLATION_MODULE_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          // The module is moving behind Bearer auth; without this the call
+          // starts coming back 401 the moment that lands.
+          ...(config.TILTAB_MODULE_API_KEY
+            ? { Authorization: `Bearer ${config.TILTAB_MODULE_API_KEY}` }
+            : {}),
+        },
         body: JSON.stringify(translateReq),
       });
 
