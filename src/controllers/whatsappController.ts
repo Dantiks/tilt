@@ -38,6 +38,7 @@ import {
   sendDocument,
   downloadMedia,
   markAsRead,
+  resolveNumberedChoice,
   wt,
   waText,
   languageRows,
@@ -228,6 +229,15 @@ async function handleText(waId: string, text: string, prefs: WaUserPreferences):
 
   if (!text) {
     await sendMainMenu(waId, prefs);
+    return;
+  }
+
+  // On providers without interactive buttons the menu was sent as a numbered
+  // list, so a bare "2" is a button press rather than a message. Resolved
+  // before the commands below; the two cannot collide.
+  const numberedChoice = resolveNumberedChoice(waId, text);
+  if (numberedChoice) {
+    await handleAction(waId, numberedChoice, prefs);
     return;
   }
 

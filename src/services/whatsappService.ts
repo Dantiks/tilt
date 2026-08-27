@@ -240,6 +240,14 @@ export async function markAsRead(messageId: string): Promise<void> {
   return whatsappProvider.markAsRead(messageId);
 }
 
+/**
+ * Action id behind a numeric reply to a numbered menu, or undefined when the
+ * provider sends real buttons and the text is just text.
+ */
+export function resolveNumberedChoice(waId: string, text: string): string | undefined {
+  return whatsappProvider.resolveNumberedChoice?.(waId, text);
+}
+
 // ---------------------------------------------------------------------------
 // User preferences
 // ---------------------------------------------------------------------------

@@ -6,8 +6,27 @@ import type { DownloadedMedia, IWhatsAppProvider } from "./types";
 const GREEN_API_BASE = "https://api.green-api.com";
 
 export class GreenApiWhatsAppProvider implements IWhatsAppProvider {
+  /**
+   * Action ids of the last numbered menu sent to each chat, in display order.
+   * Without this the numbers printed by sendButtons/sendList are decoration:
+   * the reply comes back as plain text and no longer says what was chosen.
+   * One entry per chat, replaced by the next menu.
+   */
+  private lastNumberedChoices = new Map<string, string[]>();
+
   isConfigured(): boolean {
     return Boolean(config.GREEN_API_ID_INSTANCE && config.GREEN_API_API_TOKEN_INSTANCE);
+  }
+
+  resolveNumberedChoice(waId: string, text: string): string | undefined {
+    const ids = this.lastNumberedChoices.get(waId);
+    if (!ids) return undefined;
+
+    // "2", "2." and "2)" are all how people answer a numbered list.
+    const match = text.trim().match(/^(\d{1,2})[.)]?$/);
+    if (!match) return undefined;
+
+    return ids[Number(match[1]) - 1];
   }
 
   private apiUrl(method: string): string {
@@ -46,6 +65,8 @@ export class GreenApiWhatsAppProvider implements IWhatsAppProvider {
   ): Promise<string | undefined> {
     // Green API doesn't support interactive buttons reliably on all devices (often blocked by WhatsApp for unofficial APIs).
     // We fallback to numbered lists.
+    this.lastNumberedChoices.set(waId, buttons.map((btn) => btn.id));
+
     let text = "";
     if (options.header) text += `*${options.header}*\n\n`;
     text += `${body}\n\n`;
@@ -65,6 +86,8 @@ export class GreenApiWhatsAppProvider implements IWhatsAppProvider {
     rows: WhatsAppListRow[],
     options: { header?: string; footer?: string; sectionTitle?: string } = {}
   ): Promise<string | undefined> {
+    this.lastNumberedChoices.set(waId, rows.map((row) => row.id));
+
     let text = "";
     if (options.header) text += `*${options.header}*\n\n`;
     text += `${body}\n\n`;

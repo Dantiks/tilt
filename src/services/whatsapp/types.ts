@@ -43,4 +43,14 @@ export interface IWhatsAppProvider {
   
   /** Mark a received message as read. */
   markAsRead(messageId: string): Promise<void>;
+
+  /**
+   * Map a bare numeric reply ("2") back to the action id it stood for.
+   *
+   * Providers that cannot send real interactive buttons render them as a
+   * numbered text list, so the user's choice arrives as an ordinary text
+   * message with no id attached. Those providers implement this to close the
+   * loop; providers with native buttons leave it undefined.
+   */
+  resolveNumberedChoice?(waId: string, text: string): string | undefined;
 }

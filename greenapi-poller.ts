@@ -31,11 +31,18 @@ interface Notification {
 }
 
 async function deleteNotification(receiptId: number): Promise<void> {
+  // Note the argument order: unlike every other method, deleteNotification takes
+  // the receipt id AFTER the token. Getting it wrong returns 401 and the
+  // notification stays at the head of the queue, blocking every message behind
+  // it, so a failure here has to be loud.
   try {
-    await fetch(apiUrl(`deleteNotification/${receiptId}`), {
+    const res = await fetch(`${BASE}/waInstance${ID_INSTANCE}/deleteNotification/${API_TOKEN}/${receiptId}`, {
       method: "DELETE",
       signal: AbortSignal.timeout(15000),
     });
+    if (!res.ok) {
+      console.error("[WA Poller] Failed to delete notification", receiptId, "- HTTP", res.status, await res.text());
+    }
   } catch (err) {
     console.error("[WA Poller] Failed to delete notification", receiptId, (err as Error).message);
   }
@@ -52,6 +59,11 @@ async function main() {
 
   console.log("[WA Poller] Started. Forwarding to", WEBHOOK_URL);
 
+  // A notification that cannot be deleted is redelivered forever and replays the
+  // same message at the bot on every pass, so bail out rather than spin.
+  let lastReceiptId = 0;
+  let repeats = 0;
+
   while (true) {
     try {
       // receiveNotification long-polls for up to ~20s and returns null when idle.
@@ -63,6 +75,14 @@ async function main() {
       }
 
       const { receiptId, body } = notification;
+
+      repeats = receiptId === lastReceiptId ? repeats + 1 : 0;
+      lastReceiptId = receiptId;
+      if (repeats >= 3) {
+        console.error(`[WA Poller] Notification ${receiptId} keeps coming back — it is not being deleted. Stopping instead of replaying it at the bot.`);
+        process.exit(1);
+      }
+
       console.log("[WA Poller] Notification", receiptId, body?.typeWebhook);
 
       try {
