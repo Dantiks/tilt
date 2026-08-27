@@ -339,8 +339,19 @@ function buildSystemPrompt(targetName: string, sourceName?: string): string {
       ? `from ${sourceName} into ${targetName}`
       : `into ${targetName}`;
 
+  // With no source hint the model has to identify the language itself, and
+  // Kyrgyz, Tajik and Uzbek Cyrillic sit close enough to Russian that it
+  // concludes the text is already in the target and echoes it back verbatim.
+  const detectionRule =
+    sourceName && sourceName !== "auto"
+      ? ""
+      : "The source may be Kyrgyz, Tajik, Uzbek, Russian or English. Kyrgyz, Tajik and Uzbek are " +
+        "written in Cyrillic but are not Russian — identify the language before translating, and " +
+        `never return the source unchanged unless it is genuinely already ${targetName}. `;
+
   return (
     `Translate the SOURCE text ${sourceHint}. ` +
+    detectionRule +
     "Rules: translate every sentence and word; preserve sentence structure and repetitions; " +
     "keep names, numbers, and dates accurate; use established target-language forms for names when they exist; " +
     "do not add, omit, infer, reframe, or explain. " +
