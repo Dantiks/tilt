@@ -17,14 +17,17 @@ interface ModuleJob {
   id?: string;
   status?: string;
   error?: string;
+  /** Proofread transcript. Sits on the job, not inside `result`. */
+  cleanedText?: string;
   progress?: { percent?: number };
   result?: {
     text?: string;
-    cleanedText?: string;
     language?: string;
     segments?: TranscriptionSegment[];
     provider?: string;
     model?: string;
+    /** Human-readable quality note, e.g. low confidence for the duration. */
+    warning?: string;
   };
 }
 
@@ -112,9 +115,9 @@ async function waitForJob(
 
     if (job.status === "completed" || job.status === "done" || job.result) {
       const r = job.result ?? {};
-      // cleanedText is the same transcript after proofreading and paragraphing;
-      // result.text is the raw one. Prefer the cleaned version, fall back to raw.
-      const text = r.cleanedText || r.text || "";
+      // cleanedText is the same transcript after proofreading and paragraphing,
+      // and it hangs off the job rather than off `result`; result.text is raw.
+      const text = job.cleanedText || r.text || "";
       if (!text && job.status !== "completed" && job.status !== "done") continue;
 
       logger.info("Module transcription finished", {
@@ -127,6 +130,9 @@ async function waitForJob(
 
       return {
         text,
+        // Surfaces things like "very few words recognised for this duration",
+        // which the bot shows so a poor transcript is not passed off as good.
+        warning: r.warning,
         language: r.language ?? "auto",
         // confidence comes back null from GigaAM, so nothing here relies on it.
         segments: r.segments ?? [],
