@@ -93,6 +93,25 @@ export function wt(key: string, lang: SupportedLanguage, vars?: Record<string, s
  * is rewritten in place); on WhatsApp each one has to be spelled out.
  */
 const WA_STRINGS: Record<string, Record<SupportedLanguage, string>> = {
+  // Shown once under the welcome message. WhatsApp has no command menu to
+  // discover these from, so without this a new user only ever learns the
+  // numbered lists and never finds settings or the text-translation flow.
+  quickCommands: {
+    ky: "*Командалар:*\n/menu — башкы меню\n/settings — интерфейс жана которуу тили\n/translate — текстти которуу\n/help — толук жардам\n/stop — иштеп жатканды токтотуу",
+    tg: "*Дастурҳо:*\n/menu — менюи асосӣ\n/settings — забони интерфейс ва тарҷума\n/translate — тарҷумаи матн\n/help — кӯмаки муфассал\n/stop — қатъ кардани коркард",
+    uz: "*Buyruqlar:*\n/menu — asosiy menyu\n/settings — interfeys va tarjima tili\n/translate — matnni tarjima qilish\n/help — batafsil yordam\n/stop — ishlovni to'xtatish",
+    en: "*Commands:*\n/menu — main menu\n/settings — interface and translation language\n/translate — translate text\n/help — full help\n/stop — stop processing",
+    ru: "*Команды:*\n/menu — главное меню\n/settings — язык интерфейса и перевода\n/translate — перевести текст\n/help — подробная справка\n/stop — остановить обработку",
+    uz_cyrl: "*Буйруқлар:*\n/menu — асосий меню\n/settings — интерфейс ва таржима тили\n/translate — матнни таржима қилиш\n/help — батафсил ёрдам\n/stop — ишловни тўхтатиш",
+  },
+  replyWithNumber: {
+    ky: "(Керектүү вариянттын номерин жибериңиз)",
+    tg: "(Рақами варианти лозимаро фиристед)",
+    uz: "(Kerakli variant raqamini yuboring)",
+    en: "(Reply with the number of your choice)",
+    ru: "(Отправьте номер нужного варианта)",
+    uz_cyrl: "(Керакли вариант рақамини юборинг)",
+  },
   rateResult: {
     ky: "Натыйжа кандай болду?",
     tg: "Натиҷа чӣ гуна буд?",
@@ -200,6 +219,20 @@ function splitMessage(text: string, maxLength = WA_MAX_MESSAGE_LENGTH): string[]
 // Provider Delegation
 // ---------------------------------------------------------------------------
 
+/**
+ * Providers without interactive buttons print a numbered list and have to tell
+ * the user to answer with a digit. That instruction has to follow the user's
+ * interface language, and the provider has no idea what it is.
+ */
+async function numberedHintFor(waId: string): Promise<string> {
+  try {
+    const prefs = await getWaPreferences(waId);
+    return waText("replyWithNumber", prefs.interfaceLanguage);
+  } catch {
+    return waText("replyWithNumber", "ru");
+  }
+}
+
 export async function sendText(waId: string, text: string, previewUrl = false): Promise<string | undefined> {
   return whatsappProvider.sendText(waId, text, previewUrl);
 }
@@ -210,7 +243,10 @@ export async function sendButtons(
   buttons: WhatsAppButton[],
   options: { header?: string; footer?: string } = {}
 ): Promise<string | undefined> {
-  return whatsappProvider.sendButtons(waId, body, buttons, options);
+  return whatsappProvider.sendButtons(waId, body, buttons, {
+    ...options,
+    numberedHint: await numberedHintFor(waId),
+  });
 }
 
 export async function sendList(
@@ -220,7 +256,10 @@ export async function sendList(
   rows: WhatsAppListRow[],
   options: { header?: string; footer?: string; sectionTitle?: string } = {}
 ): Promise<string | undefined> {
-  return whatsappProvider.sendList(waId, body, buttonLabel, rows, options);
+  return whatsappProvider.sendList(waId, body, buttonLabel, rows, {
+    ...options,
+    numberedHint: await numberedHintFor(waId),
+  });
 }
 
 export async function sendDocument(
@@ -546,7 +585,7 @@ export async function sendMainMenu(
 ): Promise<void> {
   const lang = prefs.interfaceLanguage;
   const body = isStart
-    ? wt("welcome", lang)
+    ? `${wt("welcome", lang)}\n\n${waText("quickCommands", lang)}`
     : `${wt("welcome", lang)}\n\n${wt("mainMenuHint", lang)}`;
 
   await sendButtons(waId, body, [

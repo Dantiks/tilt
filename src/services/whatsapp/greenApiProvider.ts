@@ -61,7 +61,7 @@ export class GreenApiWhatsAppProvider implements IWhatsAppProvider {
     waId: string,
     body: string,
     buttons: WhatsAppButton[],
-    options: { header?: string; footer?: string } = {}
+    options: { header?: string; footer?: string; numberedHint?: string } = {}
   ): Promise<string | undefined> {
     // Green API doesn't support interactive buttons reliably on all devices (often blocked by WhatsApp for unofficial APIs).
     // We fallback to numbered lists.
@@ -73,7 +73,7 @@ export class GreenApiWhatsAppProvider implements IWhatsAppProvider {
     buttons.forEach((btn, idx) => {
       text += `${idx + 1}. ${btn.title}\n`;
     });
-    text += `\n(Отправьте номер нужного варианта)`;
+    text += `\n${options.numberedHint ?? "(Отправьте номер нужного варианта)"}`;
     if (options.footer) text += `\n\n_${options.footer}_`;
 
     return this.sendText(waId, text);
@@ -84,7 +84,7 @@ export class GreenApiWhatsAppProvider implements IWhatsAppProvider {
     body: string,
     buttonLabel: string,
     rows: WhatsAppListRow[],
-    options: { header?: string; footer?: string; sectionTitle?: string } = {}
+    options: { header?: string; footer?: string; sectionTitle?: string; numberedHint?: string } = {}
   ): Promise<string | undefined> {
     this.lastNumberedChoices.set(waId, rows.map((row) => row.id));
 
@@ -97,7 +97,7 @@ export class GreenApiWhatsAppProvider implements IWhatsAppProvider {
       if (row.description) text += ` - ${row.description}`;
       text += "\n";
     });
-    text += `\n(Отправьте номер нужного варианта)`;
+    text += `\n${options.numberedHint ?? "(Отправьте номер нужного варианта)"}`;
     if (options.footer) text += `\n\n_${options.footer}_`;
 
     return this.sendText(waId, text);

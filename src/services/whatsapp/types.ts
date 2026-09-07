@@ -18,7 +18,7 @@ export interface IWhatsAppProvider {
     waId: string,
     body: string,
     buttons: WhatsAppButton[],
-    options?: { header?: string; footer?: string }
+    options?: { header?: string; footer?: string; numberedHint?: string }
   ): Promise<string | undefined>;
   
   /** Send a list menu with rows. */
@@ -27,7 +27,7 @@ export interface IWhatsAppProvider {
     body: string,
     buttonLabel: string,
     rows: WhatsAppListRow[],
-    options?: { header?: string; footer?: string; sectionTitle?: string }
+    options?: { header?: string; footer?: string; sectionTitle?: string; numberedHint?: string }
   ): Promise<string | undefined>;
   
   /** Send a document file. */
