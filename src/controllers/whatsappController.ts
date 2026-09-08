@@ -21,6 +21,7 @@ import {
 } from "../services/youtubeService";
 import { getMediaErrorMessage } from "../utils/mediaErrors";
 import { sendAdminAlert } from "../services/alertService";
+import { getWhatsAppUser, markWhatsAppUserStarted } from "../db/repos/whatsappUserRepo";
 import {
   createTranscriptionRequest,
   updateTranscriptionRequest,
@@ -192,6 +193,25 @@ export async function handleWhatsAppWebhook(req: Request, res: Response): Promis
 // Message routing
 // ---------------------------------------------------------------------------
 
+/** Words that open a conversation. "menu" is deliberately not one of them. */
+const START_WORDS = new Set(["start", "старт", "boshla", "башта", "оғоз"]);
+
+/**
+ * True when this chat may be answered: it has sent /start before, or is
+ * sending it right now. The flag is stored per chat so it survives restarts.
+ */
+async function hasStarted(waId: string, msg: WhatsAppMessage): Promise<boolean> {
+  const user = await getWhatsAppUser(waId);
+  if (user?.started_at) return true;
+
+  const text = msg.type === "text" ? (msg.text?.body ?? "").trim().toLowerCase().replace(/^\//, "") : "";
+  if (!START_WORDS.has(text)) return false;
+
+  await markWhatsAppUserStarted(waId);
+  return true;
+}
+
+
 async function handleMessage(msg: WhatsAppMessage, profileName?: string): Promise<void> {
   if (isDuplicateMessage(msg.id)) {
     logger.debug("Duplicate WhatsApp message ignored", { messageId: msg.id });
@@ -200,6 +220,15 @@ async function handleMessage(msg: WhatsAppMessage, profileName?: string): Promis
 
   const waId = msg.from;
   const prefs = await ensureWhatsAppProfile(waId, profileName);
+
+  // The bot answers a chat only once that chat has sent /start. Anything
+  // arriving before that is read and dropped without a reply, so the number
+  // never speaks to someone who did not open the conversation.
+  if (!(await hasStarted(waId, msg))) {
+    logger.debug("WhatsApp message ignored: chat has not sent /start", { waId });
+    return;
+  }
+
   void markAsRead(msg.id);
 
   switch (msg.type) {

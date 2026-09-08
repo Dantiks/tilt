@@ -7,6 +7,8 @@ export interface WhatsAppUser {
   preferred_language: string | null;
   interface_language: string | null;
   target_language: string | null;
+  /** When this chat first sent /start. NULL means the bot must stay silent. */
+  started_at: Date | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -63,6 +65,14 @@ export async function updateWhatsAppUserPreferences(
   // The row may not exist yet when a preference is set before the profile was
   // created (e.g. a webhook replay). Create it with the requested values.
   return ensureWhatsAppUser(waId, prefs);
+}
+
+/** Record that this chat has opted in, so the bot may answer it from now on. */
+export async function markWhatsAppUserStarted(waId: string): Promise<void> {
+  await query(
+    "UPDATE whatsapp_users SET started_at = NOW(), updated_at = NOW() WHERE wa_id = $1 AND started_at IS NULL",
+    [waId]
+  );
 }
 
 export async function countWhatsAppUsers(): Promise<number> {

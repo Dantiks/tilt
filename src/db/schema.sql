@@ -320,6 +320,10 @@ CREATE TABLE IF NOT EXISTS whatsapp_users (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- The bot stays silent in a chat until that chat sends /start, so it never
+-- answers a number that has not opted in. NULL means "has not started yet".
+ALTER TABLE whatsapp_users ADD COLUMN IF NOT EXISTS started_at TIMESTAMP WITH TIME ZONE;
+
 CREATE INDEX IF NOT EXISTS idx_whatsapp_users_wa_id ON whatsapp_users(wa_id);
 
 -- Media buffers and links awaiting the user's language choice / Start tap.
