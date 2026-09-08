@@ -193,22 +193,47 @@ export async function handleWhatsAppWebhook(req: Request, res: Response): Promis
 // Message routing
 // ---------------------------------------------------------------------------
 
-/** Words that open a conversation. "menu" is deliberately not one of them. */
-const START_WORDS = new Set(["start", "старт", "boshla", "башта", "оғоз"]);
+/**
+ * Words that open a conversation, and the language each one implies.
+ *
+ * "menu" is deliberately not an opener. "start" maps to nothing: it is the
+ * standard command and says nothing about the sender, so the phone-number guess
+ * stands. The rest are a clear statement of which language to be answered in.
+ */
+const START_WORDS = new Map<string, SupportedLanguage | undefined>([
+  ["start", undefined],
+  ["старт", "ru"],
+  ["башта", "ky"],
+  ["boshla", "uz"],
+  ["оғоз", "tg"],
+]);
 
 /**
  * True when this chat may be answered: it has sent /start before, or is
  * sending it right now. The flag is stored per chat so it survives restarts.
+ *
+ * Opening in a specific language also sets the interface language, since the
+ * default is guessed from the country code and the opening word is a much
+ * better signal. Only on this first message — a later choice in settings wins.
  */
-async function hasStarted(waId: string, msg: WhatsAppMessage): Promise<boolean> {
+async function hasStarted(
+  waId: string,
+  msg: WhatsAppMessage
+): Promise<{ allowed: boolean; languageChanged: boolean }> {
   const user = await getWhatsAppUser(waId);
-  if (user?.started_at) return true;
+  if (user?.started_at) return { allowed: true, languageChanged: false };
 
   const text = msg.type === "text" ? (msg.text?.body ?? "").trim().toLowerCase().replace(/^\//, "") : "";
-  if (!START_WORDS.has(text)) return false;
+  if (!START_WORDS.has(text)) return { allowed: false, languageChanged: false };
+
+  const implied = START_WORDS.get(text);
+  if (implied) {
+    await setWaInterfaceLanguage(waId, implied);
+    logger.info("Interface language taken from the opening word", { waId, language: implied });
+  }
 
   await markWhatsAppUserStarted(waId);
-  return true;
+  return { allowed: true, languageChanged: Boolean(implied) };
 }
 
 
@@ -219,15 +244,19 @@ async function handleMessage(msg: WhatsAppMessage, profileName?: string): Promis
   }
 
   const waId = msg.from;
-  const prefs = await ensureWhatsAppProfile(waId, profileName);
+  let prefs = await ensureWhatsAppProfile(waId, profileName);
 
   // The bot answers a chat only once that chat has sent /start. Anything
   // arriving before that is read and dropped without a reply, so the number
   // never speaks to someone who did not open the conversation.
-  if (!(await hasStarted(waId, msg))) {
+  const gate = await hasStarted(waId, msg);
+  if (!gate.allowed) {
     logger.debug("WhatsApp message ignored: chat has not sent /start", { waId });
     return;
   }
+  // The opening word may have just changed the language; prefs was read before
+  // that, so the greeting would otherwise go out in the language it replaced.
+  if (gate.languageChanged) prefs = await getWaPreferences(waId);
 
   void markAsRead(msg.id);
 
