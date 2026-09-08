@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from "fs";
 
 // Green-API counterpart of poller.ts: pulls queued notifications over the HTTP
 // API and replays them against the local webhook route, so the WhatsApp bot can
@@ -15,6 +16,49 @@ const BASE = "https://api.green-api.com";
 if (!ID_INSTANCE || !API_TOKEN) {
   console.error("[WA Poller] GREEN_API_ID_INSTANCE and GREEN_API_API_TOKEN_INSTANCE must be set in .env.");
   process.exit(1);
+}
+
+/**
+ * Only one poller may consume the notification queue. Two of them race for the
+ * same notifications, so each message is delivered twice and the burst of
+ * replies trips the provider's rate limit — from the outside the bot just goes
+ * quiet. A stale file from a killed process is reclaimed.
+ */
+const LOCK_FILE = "greenapi-poller.lock";
+
+function claimLock(): void {
+  if (existsSync(LOCK_FILE)) {
+    const pid = Number(readFileSync(LOCK_FILE, "utf-8").trim());
+    let alive = false;
+    try {
+      process.kill(pid, 0); // signal 0 only tests for existence
+      alive = true;
+    } catch {
+      alive = false;
+    }
+    if (alive) {
+      console.error(`[WA Poller] Already running as pid ${pid}. Refusing to start a second one.`);
+      process.exit(1);
+    }
+    console.warn(`[WA Poller] Reclaiming lock left by dead pid ${pid}.`);
+  }
+  writeFileSync(LOCK_FILE, String(process.pid));
+  const release = () => {
+    try {
+      if (existsSync(LOCK_FILE) && readFileSync(LOCK_FILE, "utf-8").trim() === String(process.pid)) {
+        unlinkSync(LOCK_FILE);
+      }
+    } catch {
+      // Nothing useful to do while exiting.
+    }
+  };
+  process.on("exit", release);
+  for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
+    process.on(sig, () => {
+      release();
+      process.exit(0);
+    });
+  }
 }
 
 function apiUrl(method: string): string {
@@ -49,6 +93,7 @@ async function deleteNotification(receiptId: number): Promise<void> {
 }
 
 async function main() {
+  claimLock();
   const state = await fetch(apiUrl("getStateInstance"), { signal: AbortSignal.timeout(15000) })
     .then((r) => r.json() as Promise<{ stateInstance?: string }>)
     .catch(() => ({ stateInstance: undefined }));

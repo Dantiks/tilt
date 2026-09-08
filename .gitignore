@@ -109,3 +109,4 @@ docs/AI_ERROR_REPORT_*.md
 
 # Claude Code local dev config
 .claude/
+greenapi-poller.lock
