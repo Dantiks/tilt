@@ -40,6 +40,10 @@ const envSchema = z.object({
   // missing is simply not advertised on the site.
   TELEGRAM_BOT_USERNAME: z.string().optional().or(z.literal("")),
   WHATSAPP_CONTACT_PHONE: z.string().optional().or(z.literal("")),
+  // Numbers the bot must never message, comma-separated digits. A blocked
+  // number is also ignored on the way in, so nothing it sends can produce a
+  // reply through some other path.
+  WHATSAPP_BLOCKED_NUMBERS: z.string().optional().or(z.literal("")).default(""),
   OPENAI_API_KEY: z.string().optional().or(z.literal("")),
   OPENAI_STT_MODEL: z.string().optional().or(z.literal("")).default("whisper-1"),
   TRANSLATION_MODULE_URL: z.string().url().optional().or(z.literal("")),

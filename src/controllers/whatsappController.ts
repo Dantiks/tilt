@@ -40,6 +40,7 @@ import {
   downloadMedia,
   markAsRead,
   resolveNumberedChoice,
+  isBlockedNumber,
   wt,
   waText,
   languageRows,
@@ -244,6 +245,14 @@ async function handleMessage(msg: WhatsAppMessage, profileName?: string): Promis
   }
 
   const waId = msg.from;
+
+  // Blocked numbers are dropped before any work is done. The send layer refuses
+  // them too; this just avoids processing a message whose reply cannot go out.
+  if (isBlockedNumber(waId)) {
+    logger.warn("WhatsApp message ignored: number is blocked", { waId });
+    return;
+  }
+
   let prefs = await ensureWhatsAppProfile(waId, profileName);
 
   // The bot answers a chat only once that chat has sent /start. Anything

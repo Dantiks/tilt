@@ -233,7 +233,29 @@ async function numberedHintFor(waId: string): Promise<string> {
   }
 }
 
+/**
+ * Numbers the bot must never message. Checked at the send layer rather than at
+ * a call site, so no future code path can reach a blocked number by accident.
+ */
+const BLOCKED_NUMBERS = new Set(
+  config.WHATSAPP_BLOCKED_NUMBERS.split(",")
+    .map((n) => n.replace(/\D/g, ""))
+    .filter(Boolean)
+);
+
+export function isBlockedNumber(waId: string): boolean {
+  return BLOCKED_NUMBERS.has(waId.replace(/\D/g, ""));
+}
+
+/** True when the send should be dropped; logs once so the silence is explainable. */
+function refuseBlocked(waId: string, what: string): boolean {
+  if (!isBlockedNumber(waId)) return false;
+  logger.warn("WhatsApp send blocked by configuration", { waId, what });
+  return true;
+}
+
 export async function sendText(waId: string, text: string, previewUrl = false): Promise<string | undefined> {
+  if (refuseBlocked(waId, "text")) return undefined;
   return whatsappProvider.sendText(waId, text, previewUrl);
 }
 
@@ -243,6 +265,7 @@ export async function sendButtons(
   buttons: WhatsAppButton[],
   options: { header?: string; footer?: string } = {}
 ): Promise<string | undefined> {
+  if (refuseBlocked(waId, "buttons")) return undefined;
   return whatsappProvider.sendButtons(waId, body, buttons, {
     ...options,
     numberedHint: await numberedHintFor(waId),
@@ -256,6 +279,7 @@ export async function sendList(
   rows: WhatsAppListRow[],
   options: { header?: string; footer?: string; sectionTitle?: string } = {}
 ): Promise<string | undefined> {
+  if (refuseBlocked(waId, "list")) return undefined;
   return whatsappProvider.sendList(waId, body, buttonLabel, rows, {
     ...options,
     numberedHint: await numberedHintFor(waId),
@@ -268,6 +292,7 @@ export async function sendDocument(
   filename: string,
   caption?: string
 ): Promise<string | undefined> {
+  if (refuseBlocked(waId, "document")) return undefined;
   return whatsappProvider.sendDocument(waId, buffer, filename, caption);
 }
 
