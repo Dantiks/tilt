@@ -44,6 +44,10 @@ const envSchema = z.object({
   // number is also ignored on the way in, so nothing it sends can produce a
   // reply through some other path.
   WHATSAPP_BLOCKED_NUMBERS: z.string().optional().or(z.literal("")).default(""),
+  // When true the bot ignores a chat until it sends /start. Off by default:
+  // the bot answers everyone. The opening word still sets the language either
+  // way, so turning this on does not change how a conversation begins.
+  WHATSAPP_REQUIRE_START: z.string().optional().default("false").transform((v) => v === "true"),
   OPENAI_API_KEY: z.string().optional().or(z.literal("")),
   OPENAI_STT_MODEL: z.string().optional().or(z.literal("")).default("whisper-1"),
   TRANSLATION_MODULE_URL: z.string().url().optional().or(z.literal("")),

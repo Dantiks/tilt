@@ -225,7 +225,11 @@ async function hasStarted(
   if (user?.started_at) return { allowed: true, languageChanged: false };
 
   const text = msg.type === "text" ? (msg.text?.body ?? "").trim().toLowerCase().replace(/^\//, "") : "";
-  if (!START_WORDS.has(text)) return { allowed: false, languageChanged: false };
+  if (!START_WORDS.has(text)) {
+    // Not an opener. Whether that is a reason to stay silent is configurable;
+    // by default it is not, and the bot answers anyone who writes to it.
+    return { allowed: !config.WHATSAPP_REQUIRE_START, languageChanged: false };
+  }
 
   const implied = START_WORDS.get(text);
   if (implied) {
