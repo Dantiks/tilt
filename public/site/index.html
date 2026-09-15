@@ -353,11 +353,22 @@
         document.getElementById("botTelegramSoon").classList.add("hidden");
       }
       if (cfg.links?.whatsapp) {
-        for (const id of ["heroWhatsApp", "botWhatsAppLink", "footerWhatsApp"]) {
-          const el = document.getElementById(id);
-          el.href = cfg.links.whatsapp;
-          el.classList.remove("hidden");
-        }
+        // WhatsApp has no Start button like Telegram, so the link pre-fills the
+        // opening word into the message field: the visitor only has to press
+        // send. The word follows the page language, and each one is an opener
+        // the bot recognises, so it also answers in that language.
+        const START_WORD = { ru: "Старт", ky: "Башта", uz: "Boshla", tg: "Оғоз", en: "Start" };
+        const setWhatsAppLinks = () => {
+          const word = START_WORD[currentLang] || START_WORD.ru;
+          const href = `${cfg.links.whatsapp}?text=${encodeURIComponent(word)}`;
+          for (const id of ["heroWhatsApp", "botWhatsAppLink", "footerWhatsApp"]) {
+            const el = document.getElementById(id);
+            el.href = href;
+            el.classList.remove("hidden");
+          }
+        };
+        setWhatsAppLinks();
+        document.addEventListener("tiltap:language", setWhatsAppLinks);
         document.getElementById("botWhatsAppSoon").classList.add("hidden");
       }
     });
