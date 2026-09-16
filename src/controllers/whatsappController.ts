@@ -257,6 +257,8 @@ async function handleMessage(msg: WhatsAppMessage, profileName?: string): Promis
     return;
   }
 
+  // Read before ensure creates the row, so we can tell a brand-new chat apart.
+  const isFirstContact = (await getWhatsAppUser(waId)) === null;
   let prefs = await ensureWhatsAppProfile(waId, profileName);
 
   // The bot answers a chat only once that chat has sent /start. Anything
@@ -282,7 +284,7 @@ async function handleMessage(msg: WhatsAppMessage, profileName?: string): Promis
       await handleAction(waId, msg.button?.payload ?? "action:main", prefs);
       return;
     case "text":
-      await handleText(waId, msg.text?.body?.trim() ?? "", prefs);
+      await handleText(waId, msg.text?.body?.trim() ?? "", prefs, isFirstContact);
       return;
     case "audio":
     case "voice":
@@ -295,11 +297,22 @@ async function handleMessage(msg: WhatsAppMessage, profileName?: string): Promis
   }
 }
 
-async function handleText(waId: string, text: string, prefs: WaUserPreferences): Promise<void> {
+/**
+ * `isFirstContact` makes the very first reply to a chat carry the command list,
+ * even when the person opened with something other than /start. WhatsApp has no
+ * command menu to discover them from, so if they are not in the first message
+ * they are not discoverable at all.
+ */
+async function handleText(
+  waId: string,
+  text: string,
+  prefs: WaUserPreferences,
+  isFirstContact = false
+): Promise<void> {
   const lang = prefs.interfaceLanguage;
 
   if (!text) {
-    await sendMainMenu(waId, prefs);
+    await sendMainMenu(waId, prefs, isFirstContact);
     return;
   }
 
@@ -377,7 +390,7 @@ async function handleText(waId: string, text: string, prefs: WaUserPreferences):
     return;
   }
 
-  await sendMainMenu(waId, prefs);
+  await sendMainMenu(waId, prefs, isFirstContact);
 }
 
 function mediaOf(msg: WhatsAppMessage): { media: WhatsAppMedia; kind: string } | null {
