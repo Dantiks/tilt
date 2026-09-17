@@ -57,6 +57,7 @@ import {
   type PendingTranslateText,
   type UserPreferences,
   LANGUAGE_LABELS,
+  targetLanguageFor,
   TEXT_FILE_THRESHOLD,
 } from "../services/telegramService";
 import {
@@ -1584,7 +1585,10 @@ async function handleCallbackQuery(callbackQuery: {
     } else if (action === "confirm" && actionId) {
       const pending = getPendingAction(chatId);
       if (pending && pending.actionId === actionId) {
-        updatePendingAction(chatId, { sourceLanguage: normalized });
+        updatePendingAction(chatId, {
+          sourceLanguage: normalized,
+          targetLanguage: targetLanguageFor(normalized, pending.targetLanguage ?? prefs.targetLanguage),
+        });
       }
       await editConfirmationMessage(chatId, messageId, prefs);
     }

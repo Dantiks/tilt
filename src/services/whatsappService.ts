@@ -18,6 +18,7 @@ import {
   SOURCE_LANGUAGES,
   INTERFACE_LANGUAGES,
   LANGUAGE_LABELS,
+  targetLanguageFor,
   t,
   type SupportedLanguage,
 } from "./telegramService";
@@ -32,6 +33,7 @@ export {
   SOURCE_LANGUAGES,
   INTERFACE_LANGUAGES,
   LANGUAGE_LABELS,
+  targetLanguageFor,
   t,
   type SupportedLanguage,
 };

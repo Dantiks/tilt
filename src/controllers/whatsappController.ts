@@ -63,6 +63,7 @@ import {
   INTERFACE_LANGUAGES,
   SUPPORTED_LANGUAGES,
   LANGUAGE_LABELS,
+  targetLanguageFor,
   WA_TEXT_FILE_THRESHOLD,
   type SupportedLanguage,
   type WaUserPreferences,
@@ -679,7 +680,10 @@ async function handleAction(waId: string, id: string, prefs: WaUserPreferences):
         await sendText(waId, wt("sessionExpired", lang));
         return;
       }
-      updateWaPendingAction(waId, { sourceLanguage: code });
+      updateWaPendingAction(waId, {
+        sourceLanguage: code,
+        targetLanguage: targetLanguageFor(code, pending.targetLanguage ?? prefs.targetLanguage),
+      });
       await sendConfirmationCard(waId, prefs);
       return;
     }

@@ -28,6 +28,22 @@ export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
 export const SOURCE_LANGUAGES = ["ky", "tg", "uz", "en", "ru"] as const;
 export const INTERFACE_LANGUAGES = ["ky", "tg", "uz", "en", "ru"] as const;
 
+/**
+ * The target language to use once the recording's language is known.
+ *
+ * A default target of Russian on a Russian recording asks for Russian to be
+ * turned into Russian: the confirmation card reads "Russian → Russian" and the
+ * translation step is skipped anyway. Offer the other main language of the
+ * region instead, so the default still produces something useful.
+ */
+export function targetLanguageFor(
+  source: SupportedLanguage,
+  target: SupportedLanguage | "none"
+): SupportedLanguage | "none" {
+  if (target === "none" || target !== source) return target;
+  return source === "ky" ? "ru" : "ky";
+}
+
 export const LANGUAGE_LABELS: Record<SupportedLanguage, string> = {
   ky: "Кыргызча",
   tg: "Тоҷикӣ",
