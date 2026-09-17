@@ -42,7 +42,12 @@ export function isSupportedMediaUrl(url: string): boolean {
   return (
     /^(https?:\/\/)?(www\.|m\.)?(youtube\.com|youtu\.be)\/.+/.test(url) ||
     /^(https?:\/\/)?(www\.|m\.|vm\.|vt\.)?tiktok\.com\/.+/.test(url) ||
-    /^(https?:\/\/)?(www\.)?instagram\.com\/(reel|p|stories|tv)\/.+/.test(url)
+    /^(https?:\/\/)?(www\.)?instagram\.com\/(reel|p|stories|tv)\/.+/.test(url) ||
+    // Facebook, including the fb.watch short form and the mobile and regional
+    // hosts people actually copy links from. Threads is deliberately absent:
+    // Cobalt answers error.api.link.invalid for it, so it cannot be downloaded.
+    /^(https?:\/\/)?(www\.|m\.|web\.|[a-z]{2}-[a-z]{2}\.)?facebook\.com\/.+/.test(url) ||
+    /^(https?:\/\/)?fb\.watch\/.+/.test(url)
   );
 }
 
