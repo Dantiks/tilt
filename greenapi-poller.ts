@@ -130,6 +130,7 @@ async function main() {
 
       console.log("[WA Poller] Notification", receiptId, body?.typeWebhook);
 
+      let reached = true;
       try {
         const forwardRes = await fetch(WEBHOOK_URL, {
           method: "POST",
@@ -141,10 +142,24 @@ async function main() {
           console.error("[WA Poller] Forward failed:", forwardRes.status, await forwardRes.text());
         }
       } catch (err) {
-        console.error("[WA Poller] Forward error:", (err as Error).message);
+        // The server is down, restarting, or otherwise unreachable. Deleting now
+        // would throw the message away: Green-API holds it for us, so leave it
+        // queued and try again once the server answers. Only a notification the
+        // server has actually seen is safe to drop.
+        reached = false;
+        console.error("[WA Poller] Server unreachable, keeping message in the queue:", (err as Error).message);
       }
 
-      // Drop it either way: a notification left in the queue is redelivered
+      if (!reached) {
+        // Not a stuck notification, just a stopped server — do not count this
+        // toward the repeat guard, which is there to catch undeletable ones.
+        repeats = 0;
+        lastReceiptId = 0;
+        await sleep(10000);
+        continue;
+      }
+
+      // Delivered: drop it. A notification left in the queue is redelivered
       // forever and blocks everything behind it.
       await deleteNotification(receiptId);
     } catch (err) {
