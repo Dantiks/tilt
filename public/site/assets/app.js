@@ -67,11 +67,11 @@ function fillLanguageSelects() {
 
   source.innerHTML =
     `<option value="auto">${tr("autoDetect")}</option>` +
-    SOURCE_LANGS.map((c) => `<option value="${c}">${LANGUAGE_META[c].flag} ${LANGUAGE_META[c].label}</option>`).join("");
+    SOURCE_LANGS.map((c) => `<option value="${c}">${LANGUAGE_META[c].label}</option>`).join("");
 
   target.innerHTML =
     `<option value="none">${tr("noTranslation")}</option>` +
-    TARGET_LANGS.map((c) => `<option value="${c}">${LANGUAGE_META[c].flag} ${LANGUAGE_META[c].label}</option>`).join("");
+    TARGET_LANGS.map((c) => `<option value="${c}">${LANGUAGE_META[c].label}</option>`).join("");
 
   source.value = prevSource || "auto";
   target.value = prevTarget || "none";
@@ -84,7 +84,7 @@ function renderTranslateAgainButtons() {
     if (code === state.detectedLang || code === state.translatedLang) continue;
     const btn = document.createElement("button");
     btn.className = "btn btn-xs btn-outline";
-    btn.textContent = `${LANGUAGE_META[code].flag} ${LANGUAGE_META[code].label}`;
+    btn.textContent = `${LANGUAGE_META[code].label}`;
     btn.addEventListener("click", () => translateShownText(code, btn));
     row.appendChild(btn);
   }
@@ -213,7 +213,7 @@ function renderMeta() {
   const parts = [];
   if (state.detectedLang) {
     const info = LANGUAGE_META[state.detectedLang];
-    parts.push(`${tr("metaDetected")}: ${info ? `${info.flag} ${info.label}` : state.detectedLang}`);
+    parts.push(`${tr("metaDetected")}: ${info ? `${info.label}` : state.detectedLang}`);
   }
   if (state.segments.length) parts.push(`${tr("metaSegments")}: ${state.segments.length}`);
   if (state.requestNumber) parts.push(`${tr("metaRequest")}: #${state.requestNumber}`);
@@ -338,7 +338,7 @@ function handleJobUpdate(job) {
     state.translatedLang = job.translatedLang || "";
     const label = LANGUAGE_META[state.translatedLang];
     showResult({
-      title: `${tr("resultTranslation")}${label ? ` — ${label.flag} ${label.label}` : ""}`,
+      title: `${tr("resultTranslation")}${label ? ` — ${label.label}` : ""}`,
       text: job.translatedText,
       warning: job.translationWarning || result.warning,
     });
@@ -468,7 +468,7 @@ async function startTextTranslation(targetLang) {
 
     const label = LANGUAGE_META[targetLang];
     showResult({
-      title: `${tr("resultTranslation")}${label ? ` — ${label.flag} ${label.label}` : ""}`,
+      title: `${tr("resultTranslation")}${label ? ` — ${label.label}` : ""}`,
       text: data.translatedText,
       warning: data.warning,
     });
@@ -511,7 +511,7 @@ async function translateShownText(targetLang, button) {
     block.className = "space-y-2";
     const heading = document.createElement("div");
     heading.className = "flex items-center gap-2 text-sm font-medium";
-    heading.textContent = `${label ? `${label.flag} ${label.label}` : targetLang}${data.requestId ? ` · #${data.requestId}` : ""}`;
+    heading.textContent = `${label ? `${label.label}` : targetLang}${data.requestId ? ` · #${data.requestId}` : ""}`;
     const body = document.createElement("div");
     body.className = "bg-base-200 rounded-box p-4 text-box";
     body.textContent = data.translatedText;

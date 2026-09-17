@@ -37,15 +37,6 @@ export const LANGUAGE_LABELS: Record<SupportedLanguage, string> = {
   uz_cyrl: "Ўзбекча (Кирил)",
 };
 
-export const LANGUAGE_FLAGS: Record<SupportedLanguage, string> = {
-  ky: "🇰🇬",
-  tg: "🇹🇯",
-  uz: "🇺🇿",
-  en: "🇬🇧",
-  ru: "🇷🇺",
-  uz_cyrl: "🇺🇿",
-};
-
 export const INTERFACE_LANGUAGE_NAMES: Record<SupportedLanguage, string> = {
   ky: "Кыргызча",
   tg: "Тоҷикӣ",
@@ -1090,7 +1081,7 @@ export function createInterfaceLanguageKeyboard(
   backAction = "action:settings"
 ): { inline_keyboard: InlineKeyboardButton[][] } {
   const buttons = INTERFACE_LANGUAGES.map((lang) => ({
-    text: `${LANGUAGE_FLAGS[lang]} ${LANGUAGE_LABELS[lang]}`,
+    text: `${LANGUAGE_LABELS[lang]}`,
     callback_data: `ui_lang:${lang}`,
   }));
   return {
@@ -1104,7 +1095,7 @@ export function createSourceLanguageKeyboard(
   backAction = "action:settings"
 ): { inline_keyboard: InlineKeyboardButton[][] } {
   const buttons = SOURCE_LANGUAGES.map((lang) => ({
-    text: `${LANGUAGE_FLAGS[lang]} ${LANGUAGE_LABELS[lang]}`,
+    text: `${LANGUAGE_LABELS[lang]}`,
     callback_data: `source:${lang}:${action}`,
   }));
   return {
@@ -1118,7 +1109,7 @@ export function createTargetLanguageKeyboard(
   backAction = "action:settings"
 ): { inline_keyboard: InlineKeyboardButton[][] } {
   const buttons = SUPPORTED_LANGUAGES.map((lang) => ({
-    text: `${LANGUAGE_FLAGS[lang]} ${LANGUAGE_LABELS[lang]}`,
+    text: `${LANGUAGE_LABELS[lang]}`,
     callback_data: `target:${lang}:${action}`,
   }));
   return {
@@ -1139,7 +1130,7 @@ export function createConfirmationKeyboard(
   const targetLabel =
     targetLanguage === "none"
       ? t("noDefaultTarget", lang)
-      : `${LANGUAGE_FLAGS[targetLanguage]} ${LANGUAGE_LABELS[targetLanguage]}`;
+      : `${LANGUAGE_LABELS[targetLanguage]}`;
 
   return {
     inline_keyboard: [
@@ -1155,7 +1146,7 @@ export function createConfirmationKeyboard(
 
 export function createTestLanguageKeyboard(): { inline_keyboard: InlineKeyboardButton[][] } {
   const buttons = SUPPORTED_LANGUAGES.map((lang) => ({
-    text: `${LANGUAGE_FLAGS[lang]} ${LANGUAGE_LABELS[lang]}`,
+    text: `${LANGUAGE_LABELS[lang]}`,
     callback_data: `test_lang:${lang}`,
   }));
   return {

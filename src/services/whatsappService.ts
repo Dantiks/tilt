@@ -18,7 +18,6 @@ import {
   SOURCE_LANGUAGES,
   INTERFACE_LANGUAGES,
   LANGUAGE_LABELS,
-  LANGUAGE_FLAGS,
   t,
   type SupportedLanguage,
 } from "./telegramService";
@@ -33,7 +32,6 @@ export {
   SOURCE_LANGUAGES,
   INTERFACE_LANGUAGES,
   LANGUAGE_LABELS,
-  LANGUAGE_FLAGS,
   t,
   type SupportedLanguage,
 };
@@ -599,7 +597,7 @@ export function languageRows(
 ): WhatsAppListRow[] {
   return languages.map((code) => ({
     id: `${idPrefix}${code}`,
-    title: `${LANGUAGE_FLAGS[code]} ${LANGUAGE_LABELS[code]}`,
+    title: `${LANGUAGE_LABELS[code]}`,
   }));
 }
 
@@ -622,15 +620,15 @@ export async function sendMainMenu(
 
 export function buildSettingsText(prefs: WaUserPreferences): string {
   const lang = prefs.interfaceLanguage;
-  const sourceLabel = `${LANGUAGE_FLAGS[prefs.sourceLanguage]} ${LANGUAGE_LABELS[prefs.sourceLanguage]}`;
+  const sourceLabel = `${LANGUAGE_LABELS[prefs.sourceLanguage]}`;
   const targetLabel =
     prefs.targetLanguage === "none"
       ? wt("noDefaultTarget", lang)
-      : `${LANGUAGE_FLAGS[prefs.targetLanguage]} ${LANGUAGE_LABELS[prefs.targetLanguage]}`;
+      : `${LANGUAGE_LABELS[prefs.targetLanguage]}`;
 
   return (
     `${wt("settingsMenu", lang)}\n\n` +
-    `${wt("settingsInterfaceLanguage", lang)}: ${LANGUAGE_FLAGS[lang]} ${LANGUAGE_LABELS[lang]}\n` +
+    `${wt("settingsInterfaceLanguage", lang)}: ${LANGUAGE_LABELS[lang]}\n` +
     `${wt("settingsSourceLanguage", lang)}: ${sourceLabel}\n` +
     `${wt("settingsTargetLanguage", lang)}: ${targetLabel}`
   );

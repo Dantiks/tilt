@@ -37,10 +37,6 @@
       white-space: nowrap;
       font-size: 0.75rem;
     }
-    .lang-flag {
-      font-size: 1.1em;
-      margin-right: 0.3em;
-    }
   </style>
 </head>
 <body class="min-h-screen bg-base-200 py-8 px-4">
@@ -50,16 +46,15 @@
       <div class="flex justify-end">
         <div class="dropdown dropdown-end">
           <div tabindex="0" role="button" class="btn btn-sm btn-ghost" id="langSwitcherBtn">
-            <span class="lang-flag" id="currentLangFlag">🇬🇧</span>
             <span id="currentLangLabel">English</span>
             <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
           </div>
           <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-1 w-52 p-2 shadow-sm">
-            <li><a data-ui-lang="en"><span class="lang-flag">🇬🇧</span>English</a></li>
-            <li><a data-ui-lang="ru"><span class="lang-flag">🇷🇺</span>Русский</a></li>
-            <li><a data-ui-lang="ky"><span class="lang-flag">🇰🇬</span>Кыргызча</a></li>
-            <li><a data-ui-lang="tg"><span class="lang-flag">🇹🇯</span>Тоҷикӣ</a></li>
-            <li><a data-ui-lang="uz"><span class="lang-flag">🇺🇿</span>Oʻzbekcha</a></li>
+            <li><a data-ui-lang="en">English</a></li>
+            <li><a data-ui-lang="ru">Русский</a></li>
+            <li><a data-ui-lang="ky">Кыргызча</a></li>
+            <li><a data-ui-lang="tg">Тоҷикӣ</a></li>
+            <li><a data-ui-lang="uz">Oʻzbekcha</a></li>
           </ul>
         </div>
       </div>
@@ -502,14 +497,6 @@
       },
     };
 
-    const UI_LANG_FLAGS = {
-      en: "🇬🇧",
-      ru: "🇷🇺",
-      ky: "🇰🇬",
-      tg: "🇹🇯",
-      uz: "🇺🇿",
-    };
-
     const UI_LANG_NAMES = {
       en: "English",
       ru: "Русский",
@@ -548,9 +535,7 @@
       });
 
       // Update language switcher button
-      const flag = UI_LANG_FLAGS[currentUiLang];
       const name = UI_LANG_NAMES[currentUiLang];
-      document.getElementById("currentLangFlag").textContent = flag;
       document.getElementById("currentLangLabel").textContent = name;
     }
 

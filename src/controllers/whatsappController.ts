@@ -63,7 +63,6 @@ import {
   INTERFACE_LANGUAGES,
   SUPPORTED_LANGUAGES,
   LANGUAGE_LABELS,
-  LANGUAGE_FLAGS,
   WA_TEXT_FILE_THRESHOLD,
   type SupportedLanguage,
   type WaUserPreferences,
@@ -539,9 +538,9 @@ function buildConfirmationText(
   targetLang: SupportedLanguage | "none",
   title?: string
 ): string {
-  const sourceLabel = `${LANGUAGE_FLAGS[sourceLang]} ${LANGUAGE_LABELS[sourceLang]}`;
+  const sourceLabel = `${LANGUAGE_LABELS[sourceLang]}`;
   const targetLabel =
-    targetLang === "none" ? wt("noDefaultTarget", lang) : `${LANGUAGE_FLAGS[targetLang]} ${LANGUAGE_LABELS[targetLang]}`;
+    targetLang === "none" ? wt("noDefaultTarget", lang) : `${LANGUAGE_LABELS[targetLang]}`;
 
   const confirm = wt(targetLang === "none" ? "confirmStartNoTranslation" : "confirmStart", lang, {
     source: sourceLabel,

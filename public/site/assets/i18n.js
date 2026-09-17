@@ -748,20 +748,20 @@ const SITE_I18N = {
 };
 
 const UI_LANGUAGES = [
-  { code: "en", flag: "🇬🇧", label: "English" },
-  { code: "ru", flag: "🇷🇺", label: "Русский" },
-  { code: "ky", flag: "🇰🇬", label: "Кыргызча" },
-  { code: "tg", flag: "🇹🇯", label: "Тоҷикӣ" },
-  { code: "uz", flag: "🇺🇿", label: "Oʻzbekcha" },
+  { code: "en", label: "English" },
+  { code: "ru", label: "Русский" },
+  { code: "ky", label: "Кыргызча" },
+  { code: "tg", label: "Тоҷикӣ" },
+  { code: "uz", label: "Oʻzbekcha" },
 ];
 
 const LANGUAGE_META = {
-  ky: { flag: "🇰🇬", label: "Кыргызча" },
-  tg: { flag: "🇹🇯", label: "Тоҷикӣ" },
-  uz: { flag: "🇺🇿", label: "Oʻzbekcha" },
-  ru: { flag: "🇷🇺", label: "Русский" },
-  en: { flag: "🇬🇧", label: "English" },
-  uz_cyrl: { flag: "🇺🇿", label: "Ўзбекча (Кирил)" },
+  ky: { label: "Кыргызча" },
+  tg: { label: "Тоҷикӣ" },
+  uz: { label: "Oʻzbekcha" },
+  ru: { label: "Русский" },
+  en: { label: "English" },
+  uz_cyrl: { label: "Ўзбекча (Кирил)" },
 };
 
 let currentLang = "en";
@@ -813,7 +813,7 @@ function initLanguageSwitcher() {
   if (menu) {
     menu.innerHTML = UI_LANGUAGES.map(
       (l) =>
-        `<li><a data-lang="${l.code}"><span class="mr-1">${l.flag}</span>${l.label}</a></li>`
+        `<li><a data-lang="${l.code}">${l.label}</a></li>`
     ).join("");
     menu.querySelectorAll("[data-lang]").forEach((el) => {
       el.addEventListener("click", () => {
@@ -831,9 +831,7 @@ function initLanguageSwitcher() {
 
 function renderCurrentLang() {
   const meta = UI_LANGUAGES.find((l) => l.code === currentLang) || UI_LANGUAGES[0];
-  const flag = document.getElementById("currentLangFlag");
   const label = document.getElementById("currentLangLabel");
-  if (flag) flag.textContent = meta.flag;
   if (label) label.textContent = meta.label;
 }
 
