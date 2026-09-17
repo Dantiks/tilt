@@ -95,11 +95,11 @@ const TRANSLATIONS: Record<string, Partial<Record<SupportedLanguage, string>>> =
     ru: "На каком языке говорят в этой записи? Выберите:",
   },
   chooseTargetLanguage: {
-    ky: "Жыйынтыкты кайсы тилге которолосуңуз? Эгер которбоой болсоңуз, «Которбоой» баскычын басыңыз.",
-    tg: "Натиҷаро ба кадом забон тарҷума кунам? Агар тарҷума лозим набошад, «Бе тарҷума»-ро пахш кунед.",
-    uz: "Natijani qaysi tilga tarjima qilay? Agar tarjima kerak bo'lmasa, «Tarjimasiz» tugmasini bosing.",
-    en: "What language should I translate the result into? If you don't need translation, tap No translation.",
-    ru: "На какой язык перевести результат? Если перевод не нужен, нажмите «Без перевода».",
+    ky: "Жыйынтыкты кайсы тилге которолосуңуз? Которуу керек болбосо, «Которбоой» дегенди тандаңыз.",
+    tg: "Натиҷаро ба кадом забон тарҷума кунам? Агар тарҷума лозим набошад, «Бе тарҷума»-ро интихоб кунед.",
+    uz: "Natijani qaysi tilga tarjima qilay? Agar tarjima kerak bo'lmasa, «Tarjimasiz»ni tanlang.",
+    en: "What language should I translate the result into? If you don't need translation, choose No translation.",
+    ru: "На какой язык перевести результат? Если перевод не нужен, выберите «Без перевода».",
   },
   sendYoutubeLink: {
     ky: "TikTok, Instagram Reels же Facebook шилтемесин жибериңиз:",
@@ -291,11 +291,11 @@ const TRANSLATIONS: Record<string, Partial<Record<SupportedLanguage, string>>> =
     ru: "Да, начать новую",
   },
   mainMenuHint: {
-    ky: "Үн кат, аудио, видео, документ же шилтеме жибериңиз.\nШилтемелер: TikTok, Instagram Reels, Facebook.\n\nТөмөнкү баскычтарды колдонуңуз:",
-    tg: "Паёми савтӣ, аудио, видео, ҳуҷҷат ё пайванд фиристед.\nПайвандҳо: TikTok, Instagram Reels, Facebook.\n\nАз тугмаҳои зерин истифода баред:",
-    uz: "Ovozli xabar, audio, video, hujjat yoki havola yuboring.\nHavolalar: TikTok, Instagram Reels, Facebook.\n\nQuyidagi tugmalardan foydalaning:",
-    en: "Send a voice message, audio, video, document or a link.\nLinks: TikTok, Instagram Reels, Facebook.\n\nUse the buttons below:",
-    ru: "Отправьте голосовое, аудио, видео, документ или ссылку.\nСсылки: TikTok, Instagram Reels, Facebook.\n\nИспользуйте кнопки ниже:",
+    ky: "Үн кат, аудио, видео, документ же шилтеме жибериңиз.\nШилтемелер: TikTok, Instagram Reels, Facebook.\n\nЖе төмөнкүлөрдүн бирин тандаңыз:",
+    tg: "Паёми савтӣ, аудио, видео, ҳуҷҷат ё пайванд фиристед.\nПайвандҳо: TikTok, Instagram Reels, Facebook.\n\nЁ яке аз имконоти зеринро интихоб кунед:",
+    uz: "Ovozli xabar, audio, video, hujjat yoki havola yuboring.\nHavolalar: TikTok, Instagram Reels, Facebook.\n\nYoki quyidagilardan birini tanlang:",
+    en: "Send a voice message, audio, video, document or a link.\nLinks: TikTok, Instagram Reels, Facebook.\n\nOr choose one of the options below:",
+    ru: "Отправьте голосовое, аудио, видео, документ или ссылку.\nСсылки: TikTok, Instagram Reels, Facebook.\n\nИли выберите один из вариантов ниже:",
   },
   confirmStart: {
     ky: "Тил жазууда: {source}\nКоторуу: {target}\n\nБаары туурабы?",
