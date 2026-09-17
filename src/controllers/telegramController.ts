@@ -1206,6 +1206,14 @@ async function sendResultDocument(
   // Rating buttons ride along with the result, so giving feedback is one tap.
   const backToMenuKeyboard = createResultKeyboard(lang, requestNumber);
 
+  // A transcript can come back empty even with segments present, and cleanup can
+  // strip one to nothing. Say so rather than sending a heading over a blank body.
+  if (!cleanedText.trim()) {
+    logger.warn("Transcription came back empty", { chatId, sourceLang, segments: segments.length });
+    await sendTextMessage(chatId, t("noSpeech", lang), { replyMarkup: createBackToMenuKeyboard(lang) });
+    return;
+  }
+
   // If a target language is chosen and differs from the source, send only the translated file.
   if (targetLang && targetLang !== "none" && targetLang !== sourceLang && cleanedText.trim()) {
     try {

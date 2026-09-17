@@ -1061,6 +1061,17 @@ async function finishResult(
     logger.warn("WhatsApp transcription quality flags", { waId, flags: quality.flags });
   }
 
+  // The callers' segment-count check does not catch this: the module can return
+  // segments that carry no words, and cleanup can strip a transcript to nothing.
+  // Without this the user gets a header with a blank body and is then asked to
+  // rate it.
+  if (!cleanedText.trim()) {
+    logger.warn("Transcription came back empty", { waId, provider: result.provider, segments: result.segments.length });
+    await closeRequest(requestNumber, { status: "completed", completedAt: new Date() });
+    await sendText(waId, wt("noSpeech", lang));
+    return;
+  }
+
   await closeRequest(requestNumber, {
     status: "completed",
     fullText: cleanedText,
