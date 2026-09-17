@@ -494,7 +494,12 @@ async function handleMediaLink(waId: string, url: string, prefs: WaUserPreferenc
     });
   }
 
-  await sendText(waId, wt("mediaPreview", lang, { title: validation.title ?? "" }));
+  // Cobalt returns no metadata, so the title is usually empty; announcing
+  // "Video found: **" adds nothing and the language question that follows says
+  // the link was accepted anyway.
+  if (validation.title) {
+    await sendText(waId, wt("mediaPreview", lang, { title: validation.title }));
+  }
   await askSourceLanguage(waId, lang, `cf:${actionId}`);
 }
 

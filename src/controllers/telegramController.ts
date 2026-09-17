@@ -500,9 +500,14 @@ async function handleMediaLink(chatId: number, url: string, prefs: UserPreferenc
     });
   }
 
+  // Cobalt returns no metadata, so the title is usually empty and the preview
+  // line would read "Video found:" with nothing after it. The language question
+  // carries the keyboard just as well.
   await sendTextMessage(
     chatId,
-    t("mediaPreview", lang, { title: escapeHtml(validation.title || "") }),
+    validation.title
+      ? t("mediaPreview", lang, { title: escapeHtml(validation.title) })
+      : t("chooseSourceLanguage", lang),
     { replyMarkup: createSourceLanguageKeyboard(`confirm:${actionId}`, lang, "action:main") }
   );
 }
