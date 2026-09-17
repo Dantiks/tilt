@@ -18,6 +18,10 @@ Real-time progress is emitted as JSON lines to stdout.
 Diagnostics (model choice, confidence, hallucination flags) go to stderr.
 """
 
+# Same reason as in youtube_cobalt.py: stock macOS python3 is 3.9, where a
+# `str | None` annotation is evaluated at import time and raises TypeError.
+from __future__ import annotations
+
 import json
 import sys
 import os

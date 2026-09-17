@@ -6,6 +6,11 @@ module rotates through a list of instances so a single broken instance does
 not block downloads.
 """
 
+# The bot spawns whatever `python3` is on PATH, which on stock macOS is still
+# 3.9; `int | None` in a signature is evaluated at import time there and raises
+# TypeError. This keeps annotations as strings so the module loads on 3.9 too.
+from __future__ import annotations
+
 import json
 import os
 import queue
