@@ -112,6 +112,17 @@ const WA_STRINGS: Record<string, Record<SupportedLanguage, string>> = {
     ru: "(Отправьте номер нужного варианта)",
     uz_cyrl: "(Керакли вариант рақамини юборинг)",
   },
+  // Sent once a result has been delivered. Telegram leaves a keyboard on screen
+  // to carry on from; WhatsApp leaves nothing, so without this the conversation
+  // simply stops and there is no sign that another file can just be sent.
+  sendAnotherHint: {
+    ky: "Дагы бир которуу үчүн жаңы текст, шилтеме же файл жибериңиз.",
+    tg: "Барои тарҷумаи нав танҳо матн, пайванд ё файли дигар фиристед.",
+    uz: "Yana bir tarjima uchun yangi matn, havola yoki fayl yuboring.",
+    en: "To do another one, just send a new text, link or file.",
+    ru: "Чтобы сделать ещё один перевод, просто отправьте новый текст, ссылку или файл.",
+    uz_cyrl: "Яна бир таржима учун янги матн, ҳавола ёки файл юборинг.",
+  },
   rateResult: {
     ky: "Натыйжа кандай болду?",
     tg: "Натиҷа чӣ гуна буд?",
@@ -669,4 +680,5 @@ export async function sendResultFeedbackPrompt(
     ],
     { footer: requestNumber ? `#${requestNumber}` : undefined }
   );
+  await sendText(waId, waText("sendAnotherHint", lang));
 }
