@@ -361,11 +361,11 @@ const TRANSLATIONS: Record<string, Partial<Record<SupportedLanguage, string>>> =
     ru: "В транскрипции обнаружены предупреждения",
   },
   unsupportedFileType: {
-    ky: "Бул файл түрү колдойбойт. Тек гана аудио же видео жибериңиз.",
-    tg: "Ин навъи файл дастгирӣ намешавад. Фақат аудио ё видео фиристед.",
-    uz: "Bu fayl turi qo'llab-quvvatlanmaydi. Faqat audio yoki video yuboring.",
-    en: "This file type is not supported. Please send only audio or video.",
-    ru: "Этот формат не поддерживается. Отправьте только аудио или видео.",
+    ky: "Бул файл иштебейт. Мага ичинде үн бар файл керек:\n• аудио — MP3, M4A, OGG, WAV, AAC\n• видео — MP4, MOV, AVI, MKV\n• же жөн гана үн кат жаздырыңыз\n\nWord, PDF, сүрөттөрдө үн жок, ошондуктан алар иштебейт.",
+    tg: "Ин файл кор намекунад. Ба ман файле лозим аст, ки садо дошта бошад:\n• аудио — MP3, M4A, OGG, WAV, AAC\n• видео — MP4, MOV, AVI, MKV\n• ё танҳо паёми савтӣ сабт кунед\n\nWord, PDF ва аксҳо садо надоранд, барои ҳамин кор намекунанд.",
+    uz: "Bu fayl ishlamaydi. Menga ichida ovozi bor fayl kerak:\n• audio — MP3, M4A, OGG, WAV, AAC\n• video — MP4, MOV, AVI, MKV\n• yoki shunchaki ovozli xabar yozing\n\nWord, PDF va rasmlarda ovoz yo'q, shuning uchun ular ishlamaydi.",
+    en: "This file will not work. I need a file with sound in it:\n• audio — MP3, M4A, OGG, WAV, AAC\n• video — MP4, MOV, AVI, MKV\n• or just record a voice message\n\nWord, PDF and photos have no sound, so they cannot be used.",
+    ru: "Этот файл не подойдёт. Мне нужен файл со звуком:\n• аудио — MP3, M4A, OGG, WAV, AAC\n• видео — MP4, MOV, AVI, MKV\n• или просто запишите голосовое\n\nВ Word, PDF и фото звука нет, поэтому они не подходят.",
   },
   fileTooLarge: {
     ky: "Файл өтө чоң ({size} МБ). Максимум 25 МБ колдойт. Кичирээк файл жибериңиз.",
@@ -539,11 +539,11 @@ const TRANSLATIONS: Record<string, Partial<Record<SupportedLanguage, string>>> =
   // names everything it accepts here — this is the screen they sit on while
   // deciding what to send.
   sendTextToTranslate: {
-    ky: "Которула турган текстти жибериңиз.\n\nОшондой эле шилтеме (TikTok, Instagram Reels, Facebook) же файл жөнөтсөңүз болот: үн кат, аудио, видео же документ.",
-    tg: "Матни тарҷумашавандаро фиристед.\n\nҲамчунин метавонед пайванд (TikTok, Instagram Reels, Facebook) ё файл фиристед: паёми савтӣ, аудио, видео ё ҳуҷҷат.",
-    uz: "Tarjima qilinadigan matnni yuboring.\n\nShuningdek havola (TikTok, Instagram Reels, Facebook) yoki fayl yuborishingiz mumkin: ovozli xabar, audio, video yoki hujjat.",
-    en: "Send me the text to translate.\n\nYou can also send a link (TikTok, Instagram Reels, Facebook) or a file: a voice message, audio, video or document.",
-    ru: "Отправьте текст для перевода.\n\nТакже можно прислать ссылку (TikTok, Instagram Reels, Facebook) или файл: голосовое, аудио, видео или документ.",
+    ky: "Которула турган текстти жибериңиз.\n\nОшондой эле мага жөнөтсөңүз болот:\n• шилтеме — TikTok, Instagram Reels, Facebook\n• үн кат (WhatsApp'тагы микрофон)\n• аудио — MP3, M4A, OGG, WAV, AAC\n• видео — MP4, MOV, AVI, MKV\n\nWord, PDF, сүрөт иштебейт: ичинде үн болушу керек.",
+    tg: "Матни тарҷумашавандаро фиристед.\n\nҲамчунин фиристода метавонед:\n• пайванд — TikTok, Instagram Reels, Facebook\n• паёми савтӣ (микрофон дар WhatsApp)\n• аудио — MP3, M4A, OGG, WAV, AAC\n• видео — MP4, MOV, AVI, MKV\n\nWord, PDF ва акс кор намекунад: бояд садо дошта бошад.",
+    uz: "Tarjima qilinadigan matnni yuboring.\n\nShuningdek yuborishingiz mumkin:\n• havola — TikTok, Instagram Reels, Facebook\n• ovozli xabar (WhatsApp'dagi mikrofon)\n• audio — MP3, M4A, OGG, WAV, AAC\n• video — MP4, MOV, AVI, MKV\n\nWord, PDF va rasm ishlamaydi: ichida ovoz bo'lishi kerak.",
+    en: "Send me the text to translate.\n\nYou can also send:\n• a link — TikTok, Instagram Reels, Facebook\n• a voice message (the microphone in WhatsApp)\n• audio — MP3, M4A, OGG, WAV, AAC\n• video — MP4, MOV, AVI, MKV\n\nWord, PDF and photos will not work: there has to be sound in it.",
+    ru: "Отправьте текст для перевода.\n\nЕщё мне можно прислать:\n• ссылку — TikTok, Instagram Reels, Facebook\n• голосовое сообщение (микрофон в WhatsApp)\n• аудио — MP3, M4A, OGG, WAV, AAC\n• видео — MP4, MOV, AVI, MKV\n\nWord, PDF и фото не подойдут: внутри должен быть звук.",
   },
   chooseTranslationTargetLanguage: {
     ky: "Текстти кайсы тилге которолосуңуз?",
