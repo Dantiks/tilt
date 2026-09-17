@@ -14,11 +14,11 @@ const MESSAGES: Record<string, Partial<Record<SupportedLanguage, string>>> = {
     ru: "❌ Видео недоступно. Возможно, оно удалено, скрыто или заблокировано в вашем регионе.",
   },
   sign_in_required: {
-    ky: "❌ Бул видео YouTube'ко кириүүнү талап кылат. Бот мындай видеолорду жүктөй албайт.",
-    tg: "❌ Ин видео талаб мекунад, ки дар YouTube ворид шавед. Бот чунин видеоҳоро боргирӣ карда наметавонад.",
-    uz: "❌ Bu video YouTube'ga kirishni talab qiladi. Bot bunday videolarni yuklab ololmaydi.",
-    en: "❌ This video requires YouTube sign-in. The bot cannot download such videos.",
-    ru: "❌ Это видео требует входа в YouTube. Бот не может скачать такие видео.",
+    ky: "❌ Бул видео аккаунтка кирүүнү талап кылат. Бот мындай видеолорду жүктөй албайт.",
+    tg: "❌ Ин видео талаб мекунад, ки ба ҳисоб ворид шавед. Бот чунин видеоҳоро боргирӣ карда наметавонад.",
+    uz: "❌ Bu video hisobga kirishni talab qiladi. Bot bunday videolarni yuklab ololmaydi.",
+    en: "❌ This video requires signing in. The bot cannot download such videos.",
+    ru: "❌ Это видео требует входа в аккаунт. Бот не может скачать такие видео.",
   },
   private: {
     ky: "❌ Бул жеке видео. Бот аны жүктөй албайт.",
@@ -42,11 +42,11 @@ const MESSAGES: Record<string, Partial<Record<SupportedLanguage, string>>> = {
     ru: "❌ Прямые трансляции нельзя расшифровать. Пожалуйста, пришлите новую ссылку после окончания эфира.",
   },
   timeout: {
-    ky: "❌ Видеону текшерүү өтө көп убакыт алды. Интернет же YouTube көйгөйлөрү мүмкүн.",
-    tg: "❌ Санҷиши видео хеле тулонӣ шуд. Эҳтимол мушкилоти интернет ё YouTube.",
-    uz: "❌ Videoni tekshirish juda uzoq davom etdi. Ehtimol internet yoki YouTube muammolari.",
-    en: "❌ Video validation took too long. Possible network or YouTube issues.",
-    ru: "❌ Проверка видео заняла слишком много времени. Возможны проблемы с сетью или YouTube.",
+    ky: "❌ Видеону текшерүү өтө көп убакыт алды. Интернет көйгөйлөрү мүмкүн.",
+    tg: "❌ Санҷиши видео хеле тулонӣ шуд. Эҳтимол мушкилоти интернет.",
+    uz: "❌ Videoni tekshirish juda uzoq davom etdi. Ehtimol internet muammolari.",
+    en: "❌ Video validation took too long. Possible network issues.",
+    ru: "❌ Проверка видео заняла слишком много времени. Возможны проблемы с сетью.",
   },
   missing_deps: {
     ky: "❌ Видеону текшерүүчү куралдар табылган жок. Администратор python3 жана requests орнотконун текшерсин.",

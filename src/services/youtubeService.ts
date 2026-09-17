@@ -162,7 +162,7 @@ export async function downloadMediaAudio(
         try {
           const data = JSON.parse(trimmed) as { type?: string; percent?: number; label?: string };
           if (data.type === "progress" && typeof data.percent === "number") {
-            onProgress?.({ percent: data.percent, label: data.label ?? "Downloading from YouTube..." });
+            onProgress?.({ percent: data.percent, label: data.label ?? "Downloading..." });
           }
         } catch {
           // ignore non-JSON
