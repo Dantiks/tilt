@@ -67,11 +67,11 @@ export const INTERFACE_LANGUAGE_NAMES: Record<SupportedLanguage, string> = {
 // ---------------------------------------------------------------------------
 const TRANSLATIONS: Record<string, Partial<Record<SupportedLanguage, string>>> = {
   welcome: {
-    ky: "<b>TilTap</b>ке кош келиңиз!\n\nМен аудио, видео жана төмөнкү шилтемелердеги сүйлөмдү текстке айлантам:\n• TikTok\n• Instagram Reels\n• Facebook\n\nКыргызча, тоҷикӣ, ўзбекча, русча жана англисча иштеиет.\n\nЖөн гана мага жибериңиз: файл, үн кат же шилтеме.",
-    tg: "Хуш омадед ба <b>TilTap</b>!\n\nМан аудио, видео ва пайвандҳои зеринро матн мекунам:\n• TikTok\n• Instagram Reels\n• Facebook\n\nБа забонҳои қирғизӣ, тоҷикӣ, ӯзбекӣ, русӣ ва англисӣ.\n\nФақат ба ман фиристед: файл, садо ё пайванд.",
-    uz: "<b>TilTap</b>ga xush kelibsiz!\n\nMen audio, video va quyidagi havolalardagi nutqni matnga aylantiraman:\n• TikTok\n• Instagram Reels\n• Facebook\n\nQirg'iz, tojik, o'zbek, rus va ingliz tillarida.\n\nShunchaki menga yuboring: fayl, ovozli xabar yoki havola.",
-    en: "Welcome to <b>TilTap</b>!\n\nI turn speech from audio, video, and the following links into text:\n• TikTok\n• Instagram Reels\n• Facebook\n\nIn Kyrgyz, Tajik, Uzbek, Russian, and English.\n\nJust send me a file, voice message, or link.",
-    ru: "Добро пожаловать в <b>TilTap</b>!\n\nЯ превращаю речь из аудио, видео и следующих ссылок в текст:\n• TikTok\n• Instagram Reels\n• Facebook\n\nПоддерживаю кыргызский, таджикский, узбекский, русский и английский.\n\nПросто отправьте мне файл, голосовое сообщение или ссылку.",
+    ky: "<b>TilTap</b>ке кош келиңиз!\n\nМен аудио, видео жана төмөнкү шилтемелердеги сүйлөмдү текстке айлантам:\n• TikTok\n• Instagram Reels\n• Facebook\n\nКыргызча, тоҷикӣ, ўзбекча, русча жана англисча иштеиет.\n\nЖөн гана мага жибериңиз: үн кат, аудио, видео, документ же шилтеме.",
+    tg: "Хуш омадед ба <b>TilTap</b>!\n\nМан аудио, видео ва пайвандҳои зеринро матн мекунам:\n• TikTok\n• Instagram Reels\n• Facebook\n\nБа забонҳои қирғизӣ, тоҷикӣ, ӯзбекӣ, русӣ ва англисӣ.\n\nФақат ба ман фиристед: паёми савтӣ, аудио, видео, ҳуҷҷат ё пайванд.",
+    uz: "<b>TilTap</b>ga xush kelibsiz!\n\nMen audio, video va quyidagi havolalardagi nutqni matnga aylantiraman:\n• TikTok\n• Instagram Reels\n• Facebook\n\nQirg'iz, tojik, o'zbek, rus va ingliz tillarida.\n\nShunchaki menga yuboring: ovozli xabar, audio, video, hujjat yoki havola.",
+    en: "Welcome to <b>TilTap</b>!\n\nI turn speech from audio, video, and the following links into text:\n• TikTok\n• Instagram Reels\n• Facebook\n\nIn Kyrgyz, Tajik, Uzbek, Russian, and English.\n\nJust send me a voice message, audio, video, document or link.",
+    ru: "Добро пожаловать в <b>TilTap</b>!\n\nЯ превращаю речь из аудио, видео и следующих ссылок в текст:\n• TikTok\n• Instagram Reels\n• Facebook\n\nПоддерживаю кыргызский, таджикский, узбекский, русский и английский.\n\nПросто отправьте мне голосовое, аудио, видео, документ или ссылку.",
   },
   help: {
     ky: "<b>Жардам</b>\n\n<b>Файл жиберүү:</b> аудио, видео, үн каттуу же документ жибериңиз. Бот тилди сурайт, андан кийин иштей баштайт.\n\n<b>Шилтемелер:</b> TikTok, Instagram Reels, Facebook шилтемелерин түз эле жибериңиз.\n\n<b>Тил орнотуулар:</b> «Орнотуулар» менен интерфейстин тилин жана которуу үчүн демейки тилди тандаңыз.\n\n<b>Командаалар:</b>\n/start — негизки меню\n/help — бул жардам\n/settings — тил орнотуулар\n/stop — активдүү процессти токтотуу",
@@ -291,11 +291,11 @@ const TRANSLATIONS: Record<string, Partial<Record<SupportedLanguage, string>>> =
     ru: "Да, начать новую",
   },
   mainMenuHint: {
-    ky: "Жөн гана аудио, видео же шилтеме жибериңиз.\nКолдойбуз: TikTok, Instagram Reels, Facebook.\n\nТөмөнкү баскычтарды колдонуңуз:",
-    tg: "Фақат аудио, видео ё пайванд фиристед.\nДастгирӣ мекунем: TikTok, Instagram Reels, Facebook.\n\nАз тугмаҳои зерин истифода баред:",
-    uz: "Shunchaki audio, video yoki havola yuboring.\nQo'llab-quvvatlaymiz: TikTok, Instagram Reels, Facebook.\n\nQuyidagi tugmalardan foydalaning:",
-    en: "Just send audio, video, or a link.\nSupported: TikTok, Instagram Reels, Facebook.\n\nUse the buttons below:",
-    ru: "Просто отправьте аудио, видео или ссылку.\nПоддерживаем: TikTok, Instagram Reels, Facebook.\n\nИспользуйте кнопки ниже:",
+    ky: "Үн кат, аудио, видео, документ же шилтеме жибериңиз.\nШилтемелер: TikTok, Instagram Reels, Facebook.\n\nТөмөнкү баскычтарды колдонуңуз:",
+    tg: "Паёми савтӣ, аудио, видео, ҳуҷҷат ё пайванд фиристед.\nПайвандҳо: TikTok, Instagram Reels, Facebook.\n\nАз тугмаҳои зерин истифода баред:",
+    uz: "Ovozli xabar, audio, video, hujjat yoki havola yuboring.\nHavolalar: TikTok, Instagram Reels, Facebook.\n\nQuyidagi tugmalardan foydalaning:",
+    en: "Send a voice message, audio, video, document or a link.\nLinks: TikTok, Instagram Reels, Facebook.\n\nUse the buttons below:",
+    ru: "Отправьте голосовое, аудио, видео, документ или ссылку.\nСсылки: TikTok, Instagram Reels, Facebook.\n\nИспользуйте кнопки ниже:",
   },
   confirmStart: {
     ky: "Тил жазууда: {source}\nКоторуу: {target}\n\nБаары туурабы?",
@@ -535,12 +535,15 @@ const TRANSLATIONS: Record<string, Partial<Record<SupportedLanguage, string>>> =
     en: "Translate text",
     ru: "Перевести текст",
   },
+  // Asking only for text made people think text was all the bot took, so it
+  // names everything it accepts here — this is the screen they sit on while
+  // deciding what to send.
   sendTextToTranslate: {
-    ky: "Которула турган текстти жибериңиз:",
-    tg: "Матни тарҷумаашро фиристед:",
-    uz: "Tarjima qilinadigan matnni yuboring:",
-    en: "Send me the text to translate:",
-    ru: "Отправьте текст для перевода:",
+    ky: "Которула турган текстти жибериңиз.\n\nОшондой эле шилтеме (TikTok, Instagram Reels, Facebook) же файл жөнөтсөңүз болот: үн кат, аудио, видео же документ.",
+    tg: "Матни тарҷумашавандаро фиристед.\n\nҲамчунин метавонед пайванд (TikTok, Instagram Reels, Facebook) ё файл фиристед: паёми савтӣ, аудио, видео ё ҳуҷҷат.",
+    uz: "Tarjima qilinadigan matnni yuboring.\n\nShuningdek havola (TikTok, Instagram Reels, Facebook) yoki fayl yuborishingiz mumkin: ovozli xabar, audio, video yoki hujjat.",
+    en: "Send me the text to translate.\n\nYou can also send a link (TikTok, Instagram Reels, Facebook) or a file: a voice message, audio, video or document.",
+    ru: "Отправьте текст для перевода.\n\nТакже можно прислать ссылку (TikTok, Instagram Reels, Facebook) или файл: голосовое, аудио, видео или документ.",
   },
   chooseTranslationTargetLanguage: {
     ky: "Текстти кайсы тилге которолосуңуз?",
