@@ -67,18 +67,18 @@ export const INTERFACE_LANGUAGE_NAMES: Record<SupportedLanguage, string> = {
 // ---------------------------------------------------------------------------
 const TRANSLATIONS: Record<string, Partial<Record<SupportedLanguage, string>>> = {
   welcome: {
-    ky: "⚠️ Бот убактылуу тест режиминде.\n\n<b>TilTap</b> үн каттарды, аудио жана видеону текстке айлантып, которот.\n\nТилдер: кыргызча, тажикче, өзбекче, орусча, англисче.\n\nКантип колдонуу: үн кат, аудио (MP3, M4A, OGG, WAV, AAC), видео (MP4, MOV, AVI, MKV) же Facebook, TikTok, Instagram шилтемесин жибериңиз — бот текст жөнөтөт.\n\n1 саатка чейин жазуу. Файл 16 МБ чейин, чоңураак болсо документ катары (100 МБ чейин).\n\nМенюну ачуу үчүн «Башта» деп жазыңыз.",
-    tg: "⚠️ Бот муваққатан дар ҳолати озмоишӣ аст.\n\n<b>TilTap</b> паёмҳои савтӣ, аудио ва видеоро ба матн табдил дода, тарҷума мекунад.\n\nЗабонҳо: қирғизӣ, тоҷикӣ, ӯзбекӣ, русӣ, англисӣ.\n\nТарзи истифода: паёми савтӣ, аудио (MP3, M4A, OGG, WAV, AAC), видео (MP4, MOV, AVI, MKV) ё пайванди Facebook, TikTok, Instagram фиристед.\n\nТо 1 соат сабт. Файл то 16 МБ, зиёдтар — ҳамчун ҳуҷҷат (то 100 МБ).\n\nБарои кушодани меню «Оғоз» нависед.",
-    uz: "⚠️ Bot vaqtincha sinov rejimida.\n\n<b>TilTap</b> ovozli xabarlar, audio va videoni matnga aylantiradi va tarjima qiladi.\n\nTillar: qirg'iz, tojik, o'zbek, rus, ingliz.\n\nQanday foydalanish: ovozli xabar, audio (MP3, M4A, OGG, WAV, AAC), video (MP4, MOV, AVI, MKV) yoki Facebook, TikTok, Instagram havolasini yuboring.\n\n1 soatgacha yozuv. Fayl 16 MB gacha, kattaroq bo'lsa hujjat sifatida (100 MB gacha).\n\nMenyuni ochish uchun «Boshla» deb yozing.",
-    en: "⚠️ The bot is temporarily in test mode.\n\n<b>TilTap</b> turns voice messages, audio and video into text and translates it.\n\nLanguages: Kyrgyz, Tajik, Uzbek, Russian, English.\n\nHow to use it: send a voice message, audio (MP3, M4A, OGG, WAV, AAC), video (MP4, MOV, AVI, MKV) or a Facebook, TikTok or Instagram link.\n\nUp to 1 hour of recording. Files up to 16 MB, bigger ones as a document (up to 100 MB).\n\nTo open the menu, write «Start».",
-    ru: "⚠️ Бот временно в тестовом режиме.\n\n<b>TilTap</b> превращает голосовые сообщения, аудио и видео в текст и переводит его.\n\nЯзыки: кыргызский, таджикский, узбекский, русский, английский.\n\nКак пользоваться: отправьте голосовое, аудио (MP3, M4A, OGG, WAV, AAC), видео (MP4, MOV, AVI, MKV) или ссылку на Facebook, TikTok, Instagram.\n\nДо 1 часа записи. Файл до 16 МБ, больше — документом (до 100 МБ).\n\nЧтобы открыть меню, напишите «Старт».",
+    ky: "⚠️ Бот убактылуу тест режиминде.\n\n<b>TilTap</b> үн каттарды, аудио жана видеону текстке айлантып, которот.\n\nТилдер: кыргызча, тажикче, өзбекче, орусча, англисче.\n\nКантип колдонуу: үн кат, аудио (MP3, M4A, OGG, WAV, AAC), видео (MP4, MOV, AVI, MKV) же YouTube, Facebook, TikTok, Instagram шилтемесин жибериңиз — бот текст жөнөтөт.\n\n1 саатка чейин жазуу. Файл 16 МБ чейин, чоңураак болсо документ катары (100 МБ чейин).\n\nМенюну ачуу үчүн «Башта» деп жазыңыз.",
+    tg: "⚠️ Бот муваққатан дар ҳолати озмоишӣ аст.\n\n<b>TilTap</b> паёмҳои савтӣ, аудио ва видеоро ба матн табдил дода, тарҷума мекунад.\n\nЗабонҳо: қирғизӣ, тоҷикӣ, ӯзбекӣ, русӣ, англисӣ.\n\nТарзи истифода: паёми савтӣ, аудио (MP3, M4A, OGG, WAV, AAC), видео (MP4, MOV, AVI, MKV) ё пайванди YouTube, Facebook, TikTok, Instagram фиристед.\n\nТо 1 соат сабт. Файл то 16 МБ, зиёдтар — ҳамчун ҳуҷҷат (то 100 МБ).\n\nБарои кушодани меню «Оғоз» нависед.",
+    uz: "⚠️ Bot vaqtincha sinov rejimida.\n\n<b>TilTap</b> ovozli xabarlar, audio va videoni matnga aylantiradi va tarjima qiladi.\n\nTillar: qirg'iz, tojik, o'zbek, rus, ingliz.\n\nQanday foydalanish: ovozli xabar, audio (MP3, M4A, OGG, WAV, AAC), video (MP4, MOV, AVI, MKV) yoki YouTube, Facebook, TikTok, Instagram havolasini yuboring.\n\n1 soatgacha yozuv. Fayl 16 MB gacha, kattaroq bo'lsa hujjat sifatida (100 MB gacha).\n\nMenyuni ochish uchun «Boshla» deb yozing.",
+    en: "⚠️ The bot is temporarily in test mode.\n\n<b>TilTap</b> turns voice messages, audio and video into text and translates it.\n\nLanguages: Kyrgyz, Tajik, Uzbek, Russian, English.\n\nHow to use it: send a voice message, audio (MP3, M4A, OGG, WAV, AAC), video (MP4, MOV, AVI, MKV) or a YouTube, Facebook, TikTok or Instagram link.\n\nUp to 1 hour of recording. Files up to 16 MB, bigger ones as a document (up to 100 MB).\n\nTo open the menu, write «Start».",
+    ru: "⚠️ Бот временно в тестовом режиме.\n\n<b>TilTap</b> превращает голосовые сообщения, аудио и видео в текст и переводит его.\n\nЯзыки: кыргызский, таджикский, узбекский, русский, английский.\n\nКак пользоваться: отправьте голосовое, аудио (MP3, M4A, OGG, WAV, AAC), видео (MP4, MOV, AVI, MKV) или ссылку на YouTube, Facebook, TikTok, Instagram.\n\nДо 1 часа записи. Файл до 16 МБ, больше — документом (до 100 МБ).\n\nЧтобы открыть меню, напишите «Старт».",
   },
   help: {
-    ky: "<b>Жардам</b>\n\n<b>Файл жиберүү:</b> аудио, видео, үн каттуу же документ жибериңиз. Бот тилди сурайт, андан кийин иштей баштайт.\n\n<b>Шилтемелер:</b> TikTok, Instagram Reels, Facebook шилтемелерин түз эле жибериңиз.\n\n<b>Тил орнотуулар:</b> «Орнотуулар» менен интерфейстин тилин жана которуу үчүн демейки тилди тандаңыз.\n\n<b>Командаалар:</b>\n/start — негизки меню\n/help — бул жардам\n/settings — тил орнотуулар\n/stop — активдүү процессти токтотуу",
-    tg: "<b>Кӯмак</b>\n\n<b>Фиристодани файл:</b> аудио, видео ё файл фиристед. Бот забонро пурсонда, сипас корро оғоз мекунад.\n\n<b>Пайвандҳо:</b> мустақиман TikTok, Instagram Reels, Facebook фиристед.\n\n<b>Танзимоти забон:</b> тавассути «Танзимот» забони интерфейс ва забони пешфарзи тарҷумаро интихоб кунед.\n\n<b>Дастурҳо:</b>\n/start — менюи асосӣ\n/help — ин кӯмак\n/settings — танзимоти забон\n/stop — қатъ кардани раванди фаъол",
-    uz: "<b>Yordam</b>\n\n<b>Fayl yuborish:</b> audio, video yoki hujjat yuboring. Bot tilni so'raydi, keyin ishlaydi.\n\n<b>Havolalar:</b> TikTok, Instagram Reels, Facebook havolalarini to'g'ridan-to'g'ri yuboring.\n\n<b>Til sozlamalari:</b> «Sozlamalar» orqali interfeys tilini va tarjima uchun standart tilni tanlang.\n\n<b>Buyruqlar:</b>\n/start — asosiy menyu\n/help — bu yordam\n/settings — til sozlamalari\n/stop — faol jarayonni to'xtatish",
-    en: "<b>Help</b>\n\n<b>Send a file:</b> send audio, video, voice, or a document. The bot will ask for the language, then start working.\n\n<b>Links:</b> send TikTok, Instagram Reels or Facebook links directly.\n\n<b>Language settings:</b> use Settings to choose the interface language and default translation language.\n\n<b>Commands:</b>\n/start — main menu\n/help — this help\n/settings — language settings\n/translate — translate text\n/stop — stop active process",
-    ru: "<b>Помощь</b>\n\n<b>Отправьте файл:</b> аудио, видео, голосовое или документ. Бот спросит язык, затем начнёт работу.\n\n<b>Ссылки:</b> отправляйте ссылки на TikTok, Instagram Reels или Facebook напрямую.\n\n<b>Настройки языка:</b> через «Настройки» выберите язык интерфейса и язык перевода по умолчанию.\n\n<b>Команды:</b>\n/start — главное меню\n/help — эта помощь\n/settings — настройки языка\n/translate — перевести текст\n/stop — остановить активный процесс",
+    ky: "<b>Жардам</b>\n\n<b>Файл жиберүү:</b> аудио, видео, үн каттуу же документ жибериңиз. Бот тилди сурайт, андан кийин иштей баштайт.\n\n<b>Шилтемелер:</b> YouTube, TikTok, Instagram Reels, Facebook шилтемелерин түз эле жибериңиз.\n\n<b>Тил орнотуулар:</b> «Орнотуулар» менен интерфейстин тилин жана которуу үчүн демейки тилди тандаңыз.\n\n<b>Командаалар:</b>\n/start — негизки меню\n/help — бул жардам\n/settings — тил орнотуулар\n/stop — активдүү процессти токтотуу",
+    tg: "<b>Кӯмак</b>\n\n<b>Фиристодани файл:</b> аудио, видео ё файл фиристед. Бот забонро пурсонда, сипас корро оғоз мекунад.\n\n<b>Пайвандҳо:</b> мустақиман YouTube, TikTok, Instagram Reels, Facebook фиристед.\n\n<b>Танзимоти забон:</b> тавассути «Танзимот» забони интерфейс ва забони пешфарзи тарҷумаро интихоб кунед.\n\n<b>Дастурҳо:</b>\n/start — менюи асосӣ\n/help — ин кӯмак\n/settings — танзимоти забон\n/stop — қатъ кардани раванди фаъол",
+    uz: "<b>Yordam</b>\n\n<b>Fayl yuborish:</b> audio, video yoki hujjat yuboring. Bot tilni so'raydi, keyin ishlaydi.\n\n<b>Havolalar:</b> YouTube, TikTok, Instagram Reels, Facebook havolalarini to'g'ridan-to'g'ri yuboring.\n\n<b>Til sozlamalari:</b> «Sozlamalar» orqali interfeys tilini va tarjima uchun standart tilni tanlang.\n\n<b>Buyruqlar:</b>\n/start — asosiy menyu\n/help — bu yordam\n/settings — til sozlamalari\n/stop — faol jarayonni to'xtatish",
+    en: "<b>Help</b>\n\n<b>Send a file:</b> send audio, video, voice, or a document. The bot will ask for the language, then start working.\n\n<b>Links:</b> send YouTube, TikTok, Instagram Reels or Facebook links directly.\n\n<b>Language settings:</b> use Settings to choose the interface language and default translation language.\n\n<b>Commands:</b>\n/start — main menu\n/help — this help\n/settings — language settings\n/translate — translate text\n/stop — stop active process",
+    ru: "<b>Помощь</b>\n\n<b>Отправьте файл:</b> аудио, видео, голосовое или документ. Бот спросит язык, затем начнёт работу.\n\n<b>Ссылки:</b> отправляйте ссылки на YouTube, TikTok, Instagram Reels или Facebook напрямую.\n\n<b>Настройки языка:</b> через «Настройки» выберите язык интерфейса и язык перевода по умолчанию.\n\n<b>Команды:</b>\n/start — главное меню\n/help — эта помощь\n/settings — настройки языка\n/translate — перевести текст\n/stop — остановить активный процесс",
   },
   chooseInterfaceLanguage: {
     ky: "Интерфейстин тилин тандаңыз:",
@@ -102,11 +102,11 @@ const TRANSLATIONS: Record<string, Partial<Record<SupportedLanguage, string>>> =
     ru: "На какой язык перевести результат? Если перевод не нужен, выберите «Без перевода».",
   },
   sendYoutubeLink: {
-    ky: "TikTok, Instagram Reels же Facebook шилтемесин жибериңиз:",
-    tg: "Пайванди TikTok, Instagram Reels ё Facebook-ро фиристед:",
-    uz: "TikTok, Instagram Reels yoki Facebook havolasini yuboring:",
-    en: "Send me a TikTok, Instagram Reels or Facebook link:",
-    ru: "Отправьте ссылку на TikTok, Instagram Reels или Facebook:",
+    ky: "YouTube, TikTok, Instagram Reels же Facebook шилтемесин жибериңиз:",
+    tg: "Пайванди YouTube, TikTok, Instagram Reels ё Facebook-ро фиристед:",
+    uz: "YouTube, TikTok, Instagram Reels yoki Facebook havolasini yuboring:",
+    en: "Send me a YouTube, TikTok, Instagram Reels or Facebook link:",
+    ru: "Отправьте ссылку на YouTube, TikTok, Instagram Reels или Facebook:",
   },
   transcribing: {
     ky: "⏳ Распознаоо жатат...",
@@ -291,11 +291,11 @@ const TRANSLATIONS: Record<string, Partial<Record<SupportedLanguage, string>>> =
     ru: "Да, начать новую",
   },
   mainMenuHint: {
-    ky: "Үн кат, аудио, видео, документ же шилтеме жибериңиз.\nШилтемелер: TikTok, Instagram Reels, Facebook.\n\nЖе төмөнкүлөрдүн бирин тандаңыз:",
-    tg: "Паёми савтӣ, аудио, видео, ҳуҷҷат ё пайванд фиристед.\nПайвандҳо: TikTok, Instagram Reels, Facebook.\n\nЁ яке аз имконоти зеринро интихоб кунед:",
-    uz: "Ovozli xabar, audio, video, hujjat yoki havola yuboring.\nHavolalar: TikTok, Instagram Reels, Facebook.\n\nYoki quyidagilardan birini tanlang:",
-    en: "Send a voice message, audio, video, document or a link.\nLinks: TikTok, Instagram Reels, Facebook.\n\nOr choose one of the options below:",
-    ru: "Отправьте голосовое, аудио, видео, документ или ссылку.\nСсылки: TikTok, Instagram Reels, Facebook.\n\nИли выберите один из вариантов ниже:",
+    ky: "Үн кат, аудио, видео, документ же шилтеме жибериңиз.\nШилтемелер: YouTube, TikTok, Instagram Reels, Facebook.\n\nЖе төмөнкүлөрдүн бирин тандаңыз:",
+    tg: "Паёми савтӣ, аудио, видео, ҳуҷҷат ё пайванд фиристед.\nПайвандҳо: YouTube, TikTok, Instagram Reels, Facebook.\n\nЁ яке аз имконоти зеринро интихоб кунед:",
+    uz: "Ovozli xabar, audio, video, hujjat yoki havola yuboring.\nHavolalar: YouTube, TikTok, Instagram Reels, Facebook.\n\nYoki quyidagilardan birini tanlang:",
+    en: "Send a voice message, audio, video, document or a link.\nLinks: YouTube, TikTok, Instagram Reels, Facebook.\n\nOr choose one of the options below:",
+    ru: "Отправьте голосовое, аудио, видео, документ или ссылку.\nСсылки: YouTube, TikTok, Instagram Reels, Facebook.\n\nИли выберите один из вариантов ниже:",
   },
   confirmStart: {
     ky: "Тил жазууда: {source}\nКоторуу: {target}\n\nБаары туурабы?",
@@ -319,11 +319,11 @@ const TRANSLATIONS: Record<string, Partial<Record<SupportedLanguage, string>>> =
     ru: "Найдено видео: <b>{title}</b>",
   },
   invalidMedia: {
-    ky: "Бул шилтемени колдойбойбуз. Азыр TikTok, Instagram Reels жана Facebook гана иштейт.",
-    tg: "Мо ин пайвандро дастгирӣ намекунем. Ҳоло танҳо TikTok, Instagram Reels ва Facebook кор мекунад.",
-    uz: "Biz bu havolani qo'llab-quvvatlamaymiz. Hozircha faqat TikTok, Instagram Reels va Facebook ishlaydi.",
-    en: "We don't support this link. Currently only TikTok, Instagram Reels and Facebook work.",
-    ru: "Мы не поддерживаем эту ссылку. Сейчас работают только TikTok, Instagram Reels и Facebook.",
+    ky: "Бул шилтемени колдойбойбуз. Азыр YouTube, TikTok, Instagram Reels жана Facebook иштейт.",
+    tg: "Мо ин пайвандро дастгирӣ намекунем. Ҳоло YouTube, TikTok, Instagram Reels ва Facebook кор мекунад.",
+    uz: "Biz bu havolani qo'llab-quvvatlamaymiz. Hozircha YouTube, TikTok, Instagram Reels va Facebook ishlaydi.",
+    en: "We don't support this link. Currently YouTube, TikTok, Instagram Reels and Facebook work.",
+    ru: "Мы не поддерживаем эту ссылку. Сейчас работают YouTube, TikTok, Instagram Reels и Facebook.",
   },
   settingsMenu: {
     ky: "Орнотуулар\n\nКайсы параметрди өзгөрткүңүз келет?",
@@ -539,11 +539,11 @@ const TRANSLATIONS: Record<string, Partial<Record<SupportedLanguage, string>>> =
   // names everything it accepts here — this is the screen they sit on while
   // deciding what to send.
   sendTextToTranslate: {
-    ky: "Которула турган текстти жибериңиз.\n\nОшондой эле мага жөнөтсөңүз болот:\n• шилтеме — TikTok, Instagram Reels, Facebook\n• үн кат (WhatsApp'тагы микрофон)\n• аудио — MP3, M4A, OGG, WAV, AAC\n• видео — MP4, MOV, AVI, MKV\n\nWord, PDF, сүрөт иштебейт: ичинде үн болушу керек.",
-    tg: "Матни тарҷумашавандаро фиристед.\n\nҲамчунин фиристода метавонед:\n• пайванд — TikTok, Instagram Reels, Facebook\n• паёми савтӣ (микрофон дар WhatsApp)\n• аудио — MP3, M4A, OGG, WAV, AAC\n• видео — MP4, MOV, AVI, MKV\n\nWord, PDF ва акс кор намекунад: бояд садо дошта бошад.",
-    uz: "Tarjima qilinadigan matnni yuboring.\n\nShuningdek yuborishingiz mumkin:\n• havola — TikTok, Instagram Reels, Facebook\n• ovozli xabar (WhatsApp'dagi mikrofon)\n• audio — MP3, M4A, OGG, WAV, AAC\n• video — MP4, MOV, AVI, MKV\n\nWord, PDF va rasm ishlamaydi: ichida ovoz bo'lishi kerak.",
-    en: "Send me the text to translate.\n\nYou can also send:\n• a link — TikTok, Instagram Reels, Facebook\n• a voice message (the microphone in WhatsApp)\n• audio — MP3, M4A, OGG, WAV, AAC\n• video — MP4, MOV, AVI, MKV\n\nWord, PDF and photos will not work: there has to be sound in it.",
-    ru: "Отправьте текст для перевода.\n\nЕщё мне можно прислать:\n• ссылку — TikTok, Instagram Reels, Facebook\n• голосовое сообщение (микрофон в WhatsApp)\n• аудио — MP3, M4A, OGG, WAV, AAC\n• видео — MP4, MOV, AVI, MKV\n\nWord, PDF и фото не подойдут: внутри должен быть звук.",
+    ky: "Которула турган текстти жибериңиз.\n\nОшондой эле мага жөнөтсөңүз болот:\n• шилтеме — YouTube, TikTok, Instagram Reels, Facebook\n• үн кат (WhatsApp'тагы микрофон)\n• аудио — MP3, M4A, OGG, WAV, AAC\n• видео — MP4, MOV, AVI, MKV\n\nWord, PDF, сүрөт иштебейт: ичинде үн болушу керек.",
+    tg: "Матни тарҷумашавандаро фиристед.\n\nҲамчунин фиристода метавонед:\n• пайванд — YouTube, TikTok, Instagram Reels, Facebook\n• паёми савтӣ (микрофон дар WhatsApp)\n• аудио — MP3, M4A, OGG, WAV, AAC\n• видео — MP4, MOV, AVI, MKV\n\nWord, PDF ва акс кор намекунад: бояд садо дошта бошад.",
+    uz: "Tarjima qilinadigan matnni yuboring.\n\nShuningdek yuborishingiz mumkin:\n• havola — YouTube, TikTok, Instagram Reels, Facebook\n• ovozli xabar (WhatsApp'dagi mikrofon)\n• audio — MP3, M4A, OGG, WAV, AAC\n• video — MP4, MOV, AVI, MKV\n\nWord, PDF va rasm ishlamaydi: ichida ovoz bo'lishi kerak.",
+    en: "Send me the text to translate.\n\nYou can also send:\n• a link — YouTube, TikTok, Instagram Reels, Facebook\n• a voice message (the microphone in WhatsApp)\n• audio — MP3, M4A, OGG, WAV, AAC\n• video — MP4, MOV, AVI, MKV\n\nWord, PDF and photos will not work: there has to be sound in it.",
+    ru: "Отправьте текст для перевода.\n\nЕщё мне можно прислать:\n• ссылку — YouTube, TikTok, Instagram Reels, Facebook\n• голосовое сообщение (микрофон в WhatsApp)\n• аудио — MP3, M4A, OGG, WAV, AAC\n• видео — MP4, MOV, AVI, MKV\n\nWord, PDF и фото не подойдут: внутри должен быть звук.",
   },
   chooseTranslationTargetLanguage: {
     ky: "Текстти кайсы тилге которолосуңуз?",
