@@ -19,6 +19,7 @@ import threading
 import time
 
 import requests
+from urllib.parse import urlparse
 
 # Community instances that currently allow unauthenticated downloads (Turnstile
 # disabled).  Override with COBALT_API_URL or COBALT_API_URLS (comma-separated).
@@ -60,6 +61,27 @@ def _api_urls() -> list[str]:
     return [u.rstrip("/") + "/" for u in DEFAULT_COBALT_APIS]
 
 
+def _api_headers(api: str | None = None) -> dict:
+    """Headers for a Cobalt call, carrying the API key when one is configured.
+
+    A protected instance answers 401 without this. The key is only ever sent to
+    a host that appears in the configured API list: a tunnel URL points back at
+    the instance, but a "redirect" result points at the service's own CDN, and
+    the key must not be handed to a third party.
+    """
+    headers = {"Accept": "application/json", "Content-Type": "application/json"}
+    key = os.environ.get("COBALT_API_KEY", "").strip()
+    if key and (api is None or _is_own_api(api)):
+        headers["Authorization"] = f"Api-Key {key}"
+    return headers
+
+
+def _is_own_api(url: str) -> bool:
+    """True when the URL's host is one of our configured Cobalt instances."""
+    host = urlparse(url).netloc.lower()
+    return any(host and host == urlparse(api).netloc.lower() for api in _api_urls())
+
+
 def _emit(progress_cb, percent: int, label: str):
     if progress_cb:
         progress_cb(percent, label)
@@ -78,7 +100,7 @@ def _request_stream(url: str, payload: dict, timeout: int | None = None) -> dict
     resp = requests.post(
         url,
         json=payload,
-        headers={"Accept": "application/json", "Content-Type": "application/json"},
+        headers=_api_headers(url),
         timeout=timeout if timeout is not None else COBALT_TIMEOUT,
     )
     resp.raise_for_status()
@@ -90,7 +112,7 @@ def _resolve_one(api: str, payload: dict, timeout: int):
     resp = requests.post(
         api,
         json=payload,
-        headers={"Accept": "application/json", "Content-Type": "application/json"},
+        headers=_api_headers(api),
         timeout=timeout,
     )
     data = {}
@@ -176,7 +198,10 @@ def _iter_resolved(payload: dict, timeout: int, progress_cb=None, resolve_errors
 
 def _download_media(media_url: str, output_path: str):
     """Download a media file from a Cobalt tunnel/redirect URL."""
-    with requests.get(media_url, stream=True, timeout=DOWNLOAD_TIMEOUT) as dl:
+    # A tunnel URL points back at the instance and needs the key; a redirect
+    # URL points at the service's own CDN and must not receive it.
+    dl_headers = {"Authorization": _api_headers(media_url)["Authorization"]} if "Authorization" in _api_headers(media_url) else {}
+    with requests.get(media_url, stream=True, timeout=DOWNLOAD_TIMEOUT, headers=dl_headers) as dl:
         dl.raise_for_status()
         with open(output_path, "wb") as f:
             for chunk in dl.iter_content(chunk_size=64 * 1024):
